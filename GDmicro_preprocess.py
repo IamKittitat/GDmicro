@@ -28,8 +28,9 @@ def trans_meta(in1,in2,out):
         o.write('\t'.join(ele)+'\ttest\n')
         c+=1
     o.close()
-def trans_meta_train(infile,out):
-    f=open(infile,'r')
+
+def trans_meta_train(input_file,out):
+    f=open(input_file,'r')
     o=open(out,'w+')
     line=f.readline().strip()
     o.write(line+'\tclass\n')
@@ -62,14 +63,13 @@ def extract_tout(tout,d,ofile):
         tem=[]
         for e in ele[1:]:
             if c in dc:
-                #o.write('\t'+e)
                 tem.append(e)
             c+=1
         o.write('\t'+'\t'.join(tem)+'\n')
     o.close()
 
 
-def normalize_data_small(infile,mtype,meta,dtype,ofile,inmerge,inmerge_meta):
+def normalize_data_small(input_file,mtype,meta,dtype,ofile,inmerge,inmerge_meta):
     f=open(meta,'r')
     meta_content=[]
     line=f.readline().strip()
@@ -94,8 +94,6 @@ def normalize_data_small(infile,mtype,meta,dtype,ofile,inmerge,inmerge_meta):
         ml_d=[dtype for i in range(n_split_d)]
         ml_h=['healthy' for i in range(n_split_h)]
         ml=ml_d+ml_h
-        #print(ml)
-        #exit()
         if len(meta_content[1:])<13:
             tmeta = 'tem_meta_' + uid + '.tsv'
             ot = open(tmeta, 'w+')
@@ -130,8 +128,7 @@ def normalize_data_small(infile,mtype,meta,dtype,ofile,inmerge,inmerge_meta):
                 i+=1
                 ot.write('\t'.join(ele)+'\n')
             ot.close()
-            #exit()
-            os.system('Rscript norm_features.R '+mtype+' '+infile+' '+tmeta+' '+dtype+' '+ofile)
+            os.system('Rscript norm_features.R '+mtype+' '+input_file+' '+tmeta+' '+dtype+' '+ofile)
             os.system('rm '+tmeta)
     else:
         if len(meta_content[1:]) < 13:
@@ -140,16 +137,15 @@ def normalize_data_small(infile,mtype,meta,dtype,ofile,inmerge,inmerge_meta):
             extract_tout(tout, d, ofile)
             os.system('rm ' + tout)
         else:
-            os.system('Rscript norm_features.R '+mtype+' '+infile+' '+meta+' '+dtype+' '+ofile)
+            os.system('Rscript norm_features.R '+mtype+' '+input_file+' '+meta+' '+dtype+' '+ofile)
 
-def normalize_data(infile,mtype,meta,dtype,ofile):
+def normalize_data(input_file,mtype,meta,dtype,ofile):
     f=open(meta,'r')
     meta_content=[]
     line=f.readline().strip()
     meta_content.append(line)
     c=0
     ag=0
-    #d={}
     while True:
         line=f.readline().strip()
         if not line:break
@@ -166,8 +162,6 @@ def normalize_data(infile,mtype,meta,dtype,ofile):
         ml_d=[dtype for i in range(n_split_d)]
         ml_h=['healthy' for i in range(n_split_h)]
         ml=ml_d+ml_h
-        #print(ml)
-        #exit()
         uid = uuid.uuid1().hex
 
         tmeta='tem_meta_'+uid+'.tsv'
@@ -181,13 +175,13 @@ def normalize_data(infile,mtype,meta,dtype,ofile):
             ot.write('\t'.join(ele)+'\n')
         ot.close()
         #exit()
-        os.system('Rscript norm_features.R '+mtype+' '+infile+' '+tmeta+' '+dtype+' '+ofile)
+        os.system('Rscript norm_features.R '+mtype+' '+input_file+' '+tmeta+' '+dtype+' '+ofile)
         os.system('rm '+tmeta)
     else:
-        os.system('Rscript norm_features.R '+mtype+' '+infile+' '+meta+' '+dtype+' '+ofile)
+        os.system('Rscript norm_features.R '+mtype+' '+input_file+' '+meta+' '+dtype+' '+ofile)
 
-def load_train_sp(infile,d,all_sp):
-    f=open(infile,'r')
+def load_train_sp(input_file,d,all_sp):
+    f=open(input_file,'r')
     samples=f.readline().strip().split()
     anno={}
     while True:
@@ -202,8 +196,8 @@ def load_train_sp(infile,d,all_sp):
         all_sp[ele[0]]=''
     return samples,anno
 
-def load_test_sp(infile,d,anno):
-    f=open(infile,'r')
+def load_test_sp(input_file,d,anno):
+    f=open(input_file,'r')
     samples=f.readline().strip().split()
     count=0
     while True:
@@ -236,8 +230,8 @@ def merge_sp(in1,in2,out):
                 o.write('\t'+str(0))
         o.write('\n')
 
-def load_item(infile,d,all_item):
-    f=open(infile,'r')
+def load_item(input_file,d,all_item):
+    f=open(input_file,'r')
     samples=f.readline().strip().split()
     while True:
         line=f.readline().strip()
@@ -268,7 +262,7 @@ def merge_eggNOG(in1,in2,out):
                 o.write('\t'+str(0))
         o.write('\n')
 
-def trans2node(infile,meta,ofile):
+def trans2node(input_file,meta,ofile):
     f=open(meta,'r')
     status=[]
     line=f.readline()
@@ -280,7 +274,7 @@ def trans2node(infile,meta,ofile):
             status.append('Health')
         else:
             status.append(ele[3])
-    a=pd.read_table(infile)
+    a=pd.read_table(input_file)
     a=a.T
     a=np.array(a)
     c=0
@@ -293,15 +287,15 @@ def trans2node(infile,meta,ofile):
         c+=1
     o.close()
 
-def split_file(infile,disease,outdir):
-    intrain=outdir+'/Split_dir/Train'
-    intest=outdir+'/Split_dir/Test'
+def split_file(input_file,disease,output_dir):
+    intrain=output_dir+'/Split_dir/Train'
+    intest=output_dir+'/Split_dir/Test'
     if not os.path.exists(intrain):
         os.makedirs(intrain)
     if not os.path.exists(intest):
         os.makedirs(intest)
 
-    f=open(infile,'r')
+    f=open(input_file,'r')
     line=f.readline().strip()
     ele=re.split(',',line)
     sp=ele[4:]
@@ -379,8 +373,8 @@ def check_test_num(meta):
     else:
         return False
 
-def pre_load(infile):
-    f=open(infile,'r')
+def pre_load(input_file):
+    f=open(input_file,'r')
     d={}
     while True:
         line=f.readline().strip()
@@ -389,10 +383,8 @@ def pre_load(infile):
         d[ele[0]]=[ele[1],ele[2]]
     return d
 
-
-
-def scan_test_num(infile,disease):
-    f=open(infile,'r')
+def scan_test_num(input_file,disease):
+    f=open(input_file,'r')
     arr=[]
     tn=0
     line=f.readline().strip()
@@ -419,44 +411,16 @@ def scan_test_num(infile,disease):
         o.write(a+'\n')
     o.close()
     return ninfile,oin
-    '''
-    else:
-        return ''
-    '''
 
-    
-    
-
-def preprocess(infile,train_mode,disease,outdir):
-    '''
-    usage="GDmicro_preprocess - Normalize all input data, merge your own test data with training data, and convert combined matrices to node feature format."
-    parser=argparse.ArgumentParser(prog="GDmicro_preprcess.py",description=usage)
-    parser.add_argument('-i','--input_train',dest='input_train',type=str,help="The dir of input training data.")
-    parser.add_argument('-b','--input_test',dest='input_test',type=str,help="The dir of input test data.")
-    parser.add_argument('-t','--train_mode',dest='train_mode',type=str,help="If set to 1, then will only normalize and convert all input data. This mode can only be used when input datasets are all training data. You don't need to provide the test data under this mode. (default: 0)")
-    parser.add_argument('-d','--disease',dest='dtype',type=str,help="The name of disease. (Note: the value should be the same as the one in your metadata file.)")
-
-    #parser.add_argument('-t','--data_type',dest='data_type',type=str,help="The type of input data. The value can be: meta (metadata), species (species matrix) or eggNOG  (eggNOG matrix). If set to \"species\" or \"eggNOG\", you also need to set \"-m\" and \"-n\" to provide the metadata of training and test datasets..")
-    parser.add_argument('-o','--outdir',dest='outdir',type=str,help="Output directory of combined and normalized results. (Default: GDmicro_merge")
-    args=parser.parse_args()
-    '''
-
-    #intrain=args.input_train
-    #intest=args.input_test
-    scan_res,oin=scan_test_num(infile,disease)
+def preprocess(input_file,train_mode,disease,output_dir):
+    scan_res,oin=scan_test_num(input_file,disease)
     if not scan_res=='':
-        infile=scan_res
-    #print(infile)
-    #exit()
-    intrain,intest=split_file(infile,disease,outdir)
+        input_file=scan_res
+    intrain,intest=split_file(input_file,disease,output_dir)
 
     train_mode=train_mode
     dtype=disease
-    out=outdir+'/Preprocess_data'
-    '''
-    if not out:
-        out="GDmicro_merge"
-    '''
+    out=output_dir+'/Preprocess_data'
     
     if not os.path.exists(out):
         os.makedirs(out)
@@ -466,102 +430,61 @@ def preprocess(infile,train_mode,disease,outdir):
     else:
         train_mode=int(train_mode)
 
-    
     intrain_meta=''
     intest_meta=''
-    #intest_meta_nl=''
     intrain_sp=''
     intest_sp=''
-    intrain_eggnog=''
-    intest_eggnog=''
     for filename in os.listdir(intrain):
         if re.search('meta\.tsv',filename):
             intrain_meta=intrain+'/'+filename
         if re.search('sp_matrix',filename):
             intrain_sp=intrain+'/'+filename
-        '''
-        if re.search('eggNOG_matrix',filename):
-            intrain_eggnog=intrain+'/'+filename
-        '''
     if train_mode==0:
         for filename in os.listdir(intest):
             if re.search('meta\.tsv',filename):
                 intest_meta=intest+'/'+filename
             if re.search('sp_matrix',filename):
                 intest_sp=intest+'/'+filename
-            '''
-            if re.search('eggNOG_matrix',filename):
-                intest_eggnog=intest+'/'+filename
-            '''
     if train_mode==0:
         check_arr=[intrain_meta,intest_meta,intrain_sp,intest_sp]
     else:
         check_arr=[intrain_meta,intrain_sp]
-    # 
     for i in check_arr:
         if i=='':
             print('Some required files are not provided. Please check!')
             exit()
         else:
             print("Load files -> "+i)
-    #exit()
     if train_mode==0:
         print('Preprocess 1 - Merge metadata.')
         trans_meta(intrain_meta,intest_meta,out+"/"+dtype+'_meta.tsv')
-        #exit()
         if check_test_num(intest_meta):
-            merge_sp(intrain_sp,intest_sp,outdir+"/Split_dir/Test/"+dtype+'_merge_sp_raw.csv')
-            temerge=outdir+"/Split_dir/Test/"+dtype+'_merge_sp_raw.csv'
-            os.system('cp '+out+"/"+dtype+'_meta.tsv'+' '+outdir+"/Split_dir/Test/"+dtype+'_meta_merge.tsv')
-            temeta=outdir+"/Split_dir/Test/"+dtype+'_meta_merge.tsv'
+            merge_sp(intrain_sp,intest_sp,output_dir+"/Split_dir/Test/"+dtype+'_merge_sp_raw.csv')
+            temerge=output_dir+"/Split_dir/Test/"+dtype+'_merge_sp_raw.csv'
+            os.system('cp '+out+"/"+dtype+'_meta.tsv'+' '+output_dir+"/Split_dir/Test/"+dtype+'_meta_merge.tsv')
+            temeta=output_dir+"/Split_dir/Test/"+dtype+'_meta_merge.tsv'
         print('Preprocess 2 - Normalize all abundance matrices.')
         normalize_data(intrain_sp,'species',intrain_meta,dtype,out+"/"+dtype+'_train_sp_norm.csv')
         if check_test_num(intest_meta):
             normalize_data_small(intest_sp, 'species', intest_meta, dtype, out + "/" + dtype + '_test_sp_norm.csv',temerge,temeta)
-            #exit()
         else:
             normalize_data(intest_sp,'species',intest_meta,dtype,out+"/"+dtype+'_test_sp_norm.csv')
-        #normalize_data(intrain_eggnog,'eggNOG',intrain_meta,dtype,out+"/"+dtype+'_train_eggNOG_norm.csv')
-        #normalize_data(intest_eggnog,'eggNOG',intest_meta,dtype,out+"/"+dtype+'_test_eggNOG_norm.csv')
     
         print('Preprocess 3 - Merge training and test datasets.') 
         merge_sp(intrain_sp,intest_sp,out+"/"+dtype+'_sp_merge_raw.csv')
         merge_sp(out+"/"+dtype+'_train_sp_norm.csv',out+"/"+dtype+'_test_sp_norm.csv',out+"/"+dtype+'_sp_merge_norm.csv')
-        #merge_eggNOG(intrain_eggnog,intest_eggnog,out+"/"+dtype+'_eggNOG_merge_raw.csv')
-        #merge_eggNOG(out+"/"+dtype+'_train_eggNOG_norm.csv',out+"/"+dtype+'_test_eggNOG_norm.csv',out+"/"+dtype+'_eggNOG_merge_norm.csv')
         print('Preprocess 4 - Convert combined matrices to node feature format.')
         trans2node(out+"/"+dtype+'_sp_merge_norm.csv',out+"/"+dtype+'_meta.tsv',out+"/"+dtype+'_sp_merge_norm_node.csv')
         trans2node(out+"/"+dtype+'_sp_merge_raw.csv',out+"/"+dtype+'_meta.tsv',out+"/"+dtype+'_sp_merge_raw_node.csv')
-        #trans2node(out+"/"+dtype+'_eggNOG_merge_norm.csv',out+"/"+dtype+'_meta.tsv',out+"/"+dtype+'_eggNOG_merge_norm_node.csv')
     else:
         print('Train mode - Preprocess 1 - Transform metadata.')
         trans_meta_train(intrain_meta,out+"/"+dtype+'_meta.tsv')
         print('Train mode - Preprocess 2 - Normalize all abundance matrices.')
         os.system('cp '+intrain_sp+' '+out+"/"+dtype+'_train_sp_raw.csv')
         normalize_data(intrain_sp,'species',intrain_meta,dtype,out+"/"+dtype+'_train_sp_norm.csv')
-        #os.system('cp '+intrain_eggnog+' '+out+"/"+dtype+'_train_eggNOG_raw.csv')
-        #normalize_data(intrain_eggnog,'eggNOG',intrain_meta,dtype,out+"/"+dtype+'_train_eggNOG_norm.csv')
         print('Train mode - Preprocess 3 - Convert normalized matrices to node feature format.')
         trans2node(out+"/"+dtype+'_train_sp_norm.csv',out+"/"+dtype+'_meta.tsv',out+"/"+dtype+'_sp_train_norm_node.csv')
         trans2node(out+"/"+dtype+'_train_sp_raw.csv',out+"/"+dtype+'_meta.tsv',out+"/"+dtype+'_sp_train_raw_node.csv')
-    '''
-    if os.path.exists(intrain+'/pre_features'):
-        os.system('cp -rf '+intrain+'/pre_features '+out)
-    '''
-    #exit()
     if not scan_res=='':
         os.system('rm '+scan_res)
     return out,oin
-
-        
-'''
-if __name__=="__main__":
-    sys.exit(main())
-'''
-
-
-#preprocess('../Single_test_datasets/train_5studies_1test_single/GuptaA_2019_test_1.csv',0,'CRC','single_sample')
-
-
-
-

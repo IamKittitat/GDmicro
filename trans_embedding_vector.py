@@ -1,27 +1,9 @@
-import re
-import os
-
-def trans(infile,insample,ofile):
-    fp=open(insample,'r')
-    line=fp.readline().strip()
-    samples=[]
-    while True:
-        line=fp.readline().strip()
-        if not line:break
-        ele=line.split('\t')
-        samples.append('S'+str(ele[0]))
-
-    f=open(infile,'r')
-    #line=f.readline()
-    o=open(ofile,'w+')
-    c=0
-    while True:
-        line=f.readline().strip()
-        if not line:break
-        ele=line.split()
-        te=[]
-        for e in ele:
-            te.append(str(float(e)))
-        o.write(samples[c]+','+','.join(te)+'\n')
-        c+=1
-#trans('../feature_out.txt','../../Graph_with_raw_data_from_paper_Merge/EMG_LOO_test_AUS_109/sample_phenotype.txt','species_embedding_vector.txt')
+def trans(merge_embedding_file, meta_file, embedding_vector_file):
+    with open(meta_file, 'r') as fp:
+        next(fp)  # Skip the header line
+        samples = ['S' + line.split('\t')[0].strip() for line in fp]
+    with open(merge_embedding_file, 'r') as f, open(embedding_vector_file, 'w') as o:
+        for c, line in enumerate(f):
+            ele = line.strip().split()
+            te = [str(float(e)) for e in ele] 
+            o.write(f"{samples[c]},{','.join(te)}\n")

@@ -22,7 +22,6 @@ import random
 import uuid
 from numpy import savetxt
 
-#exit()
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -30,14 +29,11 @@ def setup_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic=True
 
-
 def build_dir(inp):
     if not os.path.exists(inp):
         os.makedirs(inp)
 
 def select_features(eg_fs,eg_fs_norm,train_idx,fdir,meta,disease,fn):
-    #print(train_idx)
-    #exit()
     inmatrix=pd.read_table(eg_fs)
     inmatrix=inmatrix.iloc[:,train_idx]
     inmatrix.to_csv("tem_e.tsv",sep="\t")
@@ -99,12 +95,6 @@ def select_features(eg_fs,eg_fs_norm,train_idx,fdir,meta,disease,fn):
     #a=fdir+'/eggNOG_features_Fold'+str(fn)+'.tsv'
     return a
 
-
-#def build_graph_mlp(eg_fs_sf,train_idx,val_idx,meta,disease,fn):
-    
-    
-
-    
 def hard_case_split(infeatures,inlabels):
     splits=StratifiedKFold(n_splits=10,shuffle=True,random_state=1234)
     dist=cosine_similarity(infeatures,infeatures)
@@ -169,6 +159,7 @@ def avg_score(avc,vnsa):
             avc[s]['Decrease2Disease'] = sum(avc[s]['Decrease2Disease']) / vnsa[s]
             avc[s]['Decrease2Health'] = sum(avc[s]['Decrease2Health']) / vnsa[s]
     return avc
+
 def iter_run(features,train_id,test_id , adj, labels, ot2, rdir,classes_dict, tid2name, wwl,close_cv):
     model = GCN(nfeat=features.shape[1], nhid=32, nclass=labels.max().item() + 1, dropout=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
@@ -456,15 +447,6 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
         o2.write(str(c)+'\t'+s+'\t'+str(avc[s]['Increase2Disease'])+'\t'+str(avc[s]['Increase2Health'])+'\t'+str(avc[s]['Decrease2Disease'])+'\t'+str(avc[s]['Decrease2Health'])+'\t'+str(vnsa[s])+'\n')
         c+=1
 
-
-
-
-
-
-
-
-
-
 def feature_importance_check(selected,selected_arr,feature_id,train_idx,val_idx,test_idx,features,adj,labels,rdir,fn,classes_dict,tid2name,o3,wwl,ot,dcs,fnum,close_cv,o4,eg_fs_norm,oin):
     setup_seed(10)
     cround=1
@@ -604,7 +586,6 @@ def node_importance_check(selected,selected_arr,tem_train_id,val_idx,test_idx,fe
         o6.write(str(sid)+'\t'+str(tid2name[r])+'\t'+str(selected[r])+'\n')
         sid+=1
     o6.close()
-
 
 def pack_output_wwl(tem,rdir,oin):
     temd=rdir+'/tem_files'
@@ -783,30 +764,13 @@ def load_dcs(infile,dcs):
         dcs[cs]=ele[0]
         cs+=1
 
-def run(input_fs,eg_fs,eg_fs_norm,meta,disease,out,kneighbor,pre_features,rseed,cvfold,doadpt,insp,fnum,nnum,close_cv,anode,reverse,vnode,uf,bsize,rfi,oin):
+def run(node_norm,eg_fs,eg_fs_norm,meta,disease,out,kneighbor,pre_features,rseed,cvfold,doadpt,insp,fnum,nnum,close_cv,anode,reverse,vnode,uf,bsize,rfi,oin):
     if not rseed==0:
         setup_seed(rseed)
     # Load species name -> for feature importance
     dcs={}
     load_dcs(insp,dcs)
-    '''
-    f0=open(insp,'r')
-    line=f0.readline()
-    dcs={}
-    cs=0
-    while True:
-        line=f0.readline().strip()
-        if not line:break
-        ele=line.split('\t')
-        dcs[cs]=ele[0]
-        cs+=1
-    
-    if vnode==0:
-        idx_features_labels = np.genfromtxt("{}".format(input_fs),dtype=np.dtype(str))
-    else:
-        new_fs=run_MLP_embedding_da_for_node.
-    '''
-    idx_features_labels = np.genfromtxt("{}".format(input_fs),dtype=np.dtype(str))
+    idx_features_labels = np.genfromtxt("{}".format(node_norm),dtype=np.dtype(str))
     features=idx_features_labels[:, 1:-1]
     features=features.astype(float)
     features=np.array(features)
@@ -934,7 +898,7 @@ def run(input_fs,eg_fs,eg_fs_norm,meta,disease,out,kneighbor,pre_features,rseed,
             features = sp.csr_matrix(features, dtype=np.float32)
         else:
             if reverse==0:
-                embd_vector=run_MLP_embedding_da_for_node.build_graph_mlp(insp,train_idx,val_idx,meta,disease,fn+1,gdir,test_idx,kneighbor,rseed,wwl,rdir,close_cv,input_fs)
+                embd_vector=run_MLP_embedding_da_for_node.build_graph_mlp(insp,train_idx,val_idx,meta,disease,fn+1,gdir,test_idx,kneighbor,rseed,wwl,rdir,close_cv,node_norm)
 
             else:
                 embd_vector=run_MLP_embedding_da_for_node.build_graph_mlp(eg_fs_sf,train_idx,val_idx,meta,disease,fn+1,gdir,test_idx,kneighbor,rseed,wwl,rdir,close_cv,otem)
@@ -1098,8 +1062,6 @@ def run(input_fs,eg_fs,eg_fs_norm,meta,disease,out,kneighbor,pre_features,rseed,
     os.system('rm -rf '+gdir)
     #exit()
 
-
-
 def load_var(inv,infile):
     if os.path.exists(infile):
         inv=infile
@@ -1108,45 +1070,41 @@ def load_var(inv,infile):
         return 0,inv
 
 def scan_input_train_mode(indir,disease,uf):
-    input_fs=''
+    node_norm=''
     eg_fs=''
     eg_fs_norm=''
     meta=''
-    insp=''
-    check1,input_fs=load_var(input_fs,indir+'/'+disease+'_sp_train_norm_node.csv')
+    train_norm=''
+    check1,node_norm=load_var(node_norm,indir+'/'+disease+'_sp_train_norm_node.csv')
     check2,eg_fs=load_var(eg_fs,indir+'/'+disease+'_train_sp_raw.csv')
     check3,eg_fs_norm=load_var(eg_fs_norm,indir+'/'+disease+'_sp_train_raw_node.csv')
     check4,meta=load_var(meta,indir+'/'+disease+'_meta.tsv')
-    check5,insp=load_var(insp,indir+'/'+disease+'_train_sp_norm.csv')
+    check5,train_norm=load_var(train_norm,indir+'/'+disease+'_train_sp_norm.csv')
     check=check1+check2+check3+check4+check5
     if not check==5 and uf==0:
         print('Some input files are not provided, check please!')
         exit()
     pre_features={}
-    if not os.path.exists(indir+'/pre_features'):
-        #print('Can not find the dir of pre-selected features, will re-select features!')
-        x=1
-    else:
+    if os.path.exists(indir+'/pre_features'):
         for filename in os.listdir(indir+'/pre_features'):
             pre=re.split('_',filename)[0]
             pre=re.sub('Fold','',pre)
             pre=int(pre)
-            fp=open(indir+'/pre_features/'+filename,'r')
             pre_features[pre]=indir+'/pre_features/'+filename
-    return input_fs,eg_fs,eg_fs_norm,meta,insp,pre_features
 
+    return node_norm,eg_fs,eg_fs_norm,meta,train_norm,pre_features
 
 def scan_input(indir,disease,uf):
-    input_fs=''
+    node_norm=''
     eg_fs=''
     eg_fs_norm=''
     meta=''
-    insp=''
-    check1,input_fs=load_var(input_fs,indir+'/'+disease+'_sp_merge_norm_node.csv')
+    train_norm=''
+    check1,node_norm=load_var(node_norm,indir+'/'+disease+'_sp_merge_norm_node.csv')
     check2,eg_fs=load_var(eg_fs,indir+'/'+disease+'_sp_merge_raw.csv')
     check3,eg_fs_norm=load_var(eg_fs_norm,indir+'/'+disease+'_sp_merge_raw_node.csv')
     check4,meta=load_var(meta,indir+'/'+disease+'_meta.tsv')
-    check5,insp=load_var(insp,indir+'/'+disease+'_sp_merge_norm.csv')
+    check5,train_norm=load_var(train_norm,indir+'/'+disease+'_sp_merge_norm.csv')
     check= check1+check2+check3+check4+check5
     if not check==5 and uf==0:
         print('Some input files are not provided, check please!')
@@ -1166,10 +1124,7 @@ def scan_input(indir,disease,uf):
             pre_features[pre]=indir+'/pre_features/'+filename
 
     
-    return input_fs,eg_fs,eg_fs_norm,meta,insp,pre_features
-
-
-    
+    return node_norm,eg_fs,eg_fs_norm,meta,train_norm,pre_features
 
 def main():
     usage="GDmicro - Use GCN and domain adaptation to predict disease based on microbiome data."
@@ -1177,7 +1132,6 @@ def main():
     parser.add_argument('-i','--input_file',dest='input_file',type=str,help="The directory of the input csv file.")
     parser.add_argument('-t','--train_mode',dest='train_mode',type=str,help="If set to 1, then will apply k-fold cross validation to all input datasets. This mode can only be used when input datasets all have labels and set as \"train\" in input file.")
     #parser.add_argument('-v','--close_cv',dest='close_cv',type=str,help="If set to 1, will close the k-fold cross-validation and use all datasets for training. Only work when \"train mode\" is off (-t 0). (default: 0)")
-    
     parser.add_argument('-d','--disease',dest='disease',type=str,help="The name of the disease.")
     parser.add_argument('-k','--kneighbor',dest='kneighbor',type=str,help="The number of neighborhoods in the knn graph. (default: 5)")
     parser.add_argument('-b','--batchsize',dest='bsize',type=str,help="The batch size during the training process. (default: 64)")
@@ -1191,113 +1145,52 @@ def main():
     #parser.add_argument('-r','--reverse',dest='reverse',type=str,help="If set to 1, then will use functional data as node features, and compositional data to build edges. (default: 0)")
     #parser.add_argument('-v','--embed_vector_node',dest='vnode',type=str,help="If set to 1, then will apply domain adaptation network to node features, and use embedding vectors as nodes.. (default: 0)")
     #parser.add_argument('-u','--unique_feature',dest='uf',type=str,help="If set to 1, then will only use compositional data to build edges and as node features.")
-
     parser.add_argument('-o','--outdir',dest='outdir',type=str,help="Output directory of test results. (Default: GDmicro_res)")
 
-    args=parser.parse_args()
-    infile=args.input_file
-    train_mode=args.train_mode
-    bsize=args.bsize
-    rfi=args.rfi
-
-    #close_cv=args.close_cv
-    #input_fs=args.input_fs
-    #eg_fs=args.eg_fs
-    #eg_fs_norm=args.eg_fs_norm
-    #meta=args.meta
-    anode=args.anode
-    disease=args.disease
-    nnum=args.nnum
-    fnum=args.fnum
-    kneighbor=args.kneighbor
-    #fuse=args.fuse
-    cvfold=args.cvfold
-    reverse=0
-    vnode=0
-    uf=1
+    args = parser.parse_args()
+    input_file = args.input_file
+    train_mode = args.train_mode
+    bsize = args.bsize
+    rfi = args.rfi
+    anode = args.anode
+    disease = args.disease
+    nnum = args.nnum
+    fnum = args.fnum
+    kneighbor = args.kneighbor
+    cvfold = args.cvfold
     rseed=args.rseed
     doadpt=args.doadpt
-
-    out=args.outdir
+    output_dir=args.outdir
     close_cv=0
-    #fnum=100
-    '''
-    if not close_cv:
-        close_cv=0
-    else:
-        close_cv=int(close_cv)
-    
-    if not reverse:
-        reverse=0
-    else:
-        reverse=int(reverse)
-    if not uf:
-        uf=1
-    else:
-        uf=int(uf)
-    if not vnode:
-        vnode=0
-    else:
-        vnode=int(vnode)
-    '''
-    if not bsize:
-        bsize=64
-    else:
-        bsize=int(bsize)
-    if not rfi:
-        rfi=1
-    else:
-        rfi=int(rfi)
-    if not anode:
-        anode=0
-    else:
-        anode=int(anode)
-    if not nnum:
-        nnum=20
-    else:
-        nnum=int(nnum)
-    
-    if not fnum:
-        fnum=10
-    else:
-        fnum=int(fnum)
-    
-    if not kneighbor:
-        kneighbor=5
-    else:
-        kneighbor=int(kneighbor)
-    if not train_mode:
-        train_mode=0
-    else:
-        train_mode=int(train_mode)
-    if not cvfold:
-        cvfold=10
-    else:
-        cvfold=int(cvfold)
-    if not rseed:
-        rseed=0
-    else:
-        rseed=int(rseed)
-    if not doadpt:
-        doadpt=1
-    else:
-        doadpt=int(doadpt)
-    if not out:
-        out="GDmicro_res"
-    
-    indir,oin=preprocess(infile,train_mode,disease,out)
-    #print(indir)
-    #exit()
-    
-    if train_mode==0:
-        input_fs,eg_fs,eg_fs_norm,meta,insp,pre_features=scan_input(indir,disease,uf)
-        run(input_fs,eg_fs,eg_fs_norm,meta,disease,out,kneighbor,pre_features,rseed,cvfold,doadpt,insp,fnum,nnum,close_cv,anode,reverse,vnode,uf,bsize,rfi,oin)
-    else:
-        input_fs,eg_fs,eg_fs_norm,meta,insp,pre_features=scan_input_train_mode(indir,disease,uf)
-        run_GCN_train_mode.run(input_fs,eg_fs,eg_fs_norm,meta,disease,out,kneighbor,rseed,cvfold,insp,fnum,nnum,pre_features,anode,reverse,uf,rfi)
+    reverse = 0
+    vnode = 0
+    uf = 1
 
+    # Set default values
+    bsize = int(bsize) if bsize else 64
+    rfi = int(rfi) if rfi else 1
+    anode = int(anode) if anode else 0
+    nnum = int(nnum) if nnum else 20
+    fnum = int(fnum) if fnum else 10
+    kneighbor = int(kneighbor) if kneighbor else 5
+    train_mode = int(train_mode) if train_mode else 0
+    cvfold = int(cvfold) if cvfold else 10
+    rseed = int(rseed) if rseed else 0
+    doadpt = int(doadpt) if doadpt else 1
+    output_dir = output_dir if output_dir else "GDmicro_res"
 
-
+    indir, oin = preprocess(input_file,train_mode,disease,output_dir)
+    if train_mode == 0:
+        node_norm,eg_fs,eg_fs_norm,meta,train_norm,pre_features = scan_input(indir,disease,uf)
+        run(node_norm,eg_fs,eg_fs_norm,meta,disease,output_dir,kneighbor,pre_features,rseed,cvfold,doadpt,train_norm,fnum,nnum,close_cv,anode,reverse,vnode,uf,bsize,rfi,oin)
+    else:
+        # node_norm = (samples, idx+features+label)
+        # eg_fs = raw data without meta data
+        # eg_fs_norm = (samples, idx+features+label) with normalized
+        # meta = metadata
+        # train_norm = normalized data without meta data
+        node_norm,eg_fs,eg_fs_norm,meta,train_norm,pre_features = scan_input_train_mode(indir,disease,uf)
+        run_GCN_train_mode.run(node_norm,eg_fs,eg_fs_norm,meta,disease,output_dir,kneighbor,rseed,cvfold,train_norm,fnum,nnum,pre_features,anode,reverse,uf,rfi)
 
 if __name__=="__main__":
     sys.exit(main())

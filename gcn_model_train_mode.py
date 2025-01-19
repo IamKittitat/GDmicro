@@ -4,17 +4,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 import scipy.sparse as sp
-#import torch.nn.functional as F
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
-#########################
 from sklearn.model_selection import StratifiedKFold
-import random
-#import calculate_avg_acc_of_cross_validation_test
 from sklearn import metrics
-from scipy import stats
-
-
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 hidden = 32
@@ -23,9 +16,7 @@ lr = 0.01
 weight_decay = 1e-5
 fastmode = 'store_true'
 
-
 def encode_onehot(labels):
-    #classes=set(labels)
     classes=sorted(list(set(labels)),reverse=True)
     classes_dict={c: np.identity(len(classes))[i, :] for i, c in enumerate(classes)}
     labels_onehot = np.array(list(map(classes_dict.get, labels)), dtype=np.int32)
@@ -162,9 +153,6 @@ def load_data(mlp_or_not,graph,node_file,input_sample):
     #print(labels)
     return adj, features, labels, features_train,labels_train, idx_test,idx_train,classes_dict,tid2name
 
-#adj, features, labels, idx_train, idx_val, idx_test=load_data()
-#splits=KFold(n_splits=10,shuffle=True,random_state=1234)
-
 class GraphConvolution(Module):
     def __init__(self,in_features,out_features,bias=True):
         super(GraphConvolution, self).__init__()
@@ -197,19 +185,11 @@ class GCN(nn.Module):
         self.gc1 = GraphConvolution(nfeat, nhid)
         self.gc2 = GraphConvolution(nhid, nclass)
         self.dropout = dropout
-    '''
-    def forward(self,x,adj):
-        h1=F.relu(self.gc1(x, adj))
-        logits = self.gc2(h1, adj)
-        return logits
-    '''
     def forward(self, x, adj):
         x = torch.nn.functional.relu(self.gc1(x, adj))
         x = torch.nn.functional.dropout(x, self.dropout, training=self.training)
         x = self.gc2(x, adj)
         return torch.nn.functional.log_softmax(x, dim=1)
-
-#model = GCN(nfeat=features.shape[1], nhid=hidden,nclass=labels.max().item() + 1,dropout=dropout)
 
 def accuracy(output,labels):
     preds=output.max(1)[1].type_as(labels)
@@ -218,28 +198,14 @@ def accuracy(output,labels):
     return correct/len(labels)
 
 def AUC(output,labels):
-    #print(output.data.numpy())
     output=torch.exp(output)
     a=output.data.numpy()
     preds=a[:,1]
-    #exit()
-    #preds=output.max(1)[0].data.numpy()
-    #print(preds,output.max(1)[1])
-    #print(labels)
-    #exit()
-    #preds=output.max(1)[1].type_as(labels)
-    #print(np.array(preds),np.array(labels))
-    #exit()
-    fpr,tpr,thresholds=metrics.roc_curve(np.array(labels),np.array(preds))
+    fpr,tpr,_ = metrics.roc_curve(np.array(labels),np.array(preds))
     auc=metrics.auc(fpr,tpr)
-    #print(fpr,tpr)
-    #exit()
     return auc
 
-def train_fs(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,o,max_val_auc,rdir,fold,classes_dict,tid2name,record):
-    #model.to(device).super().reset_parameters()
-    #model = GCN(nfeat=features.shape[1], nhid=hidden, nclass=labels.max().item() + 1, dropout=dropout)
-    #optimizer = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=weight_decay)
+def train_fs(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,result_detailed_file,max_val_auc,rdir,fold,classes_dict,tid2name,record):
     t=time.time()
     model.train()
     optimizer.zero_grad()
@@ -257,14 +223,11 @@ def train_fs(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,o
     acc_val = accuracy(output[idx_val_in], labels[idx_val_in])
     auc_val = AUC(output[idx_val_in], labels[idx_val_in])
     print('Epoch: {:04d}'.format(epoch+1),'loss_train: {:.4f}'.format(loss_train.item()),'acc_train: {:.4f}'.format(acc_train.item()),'loss_val: {:.4f}'.format(loss_val.item()),'acc_val: {:.4f}'.format(acc_val.item()),'time: {:.4f}s'.format(time.time() - t),'AUC_train: {:.4f}'.format(auc_train.item()),'AUC_val: {:.4f}'.format(auc_val.item()))
-    o.write('Epoch: {:04d}'.format(epoch+1)+' loss_train: {:.4f}'.format(loss_train.item())+' acc_train: {:.4f}'.format(acc_train.item())+' loss_val: {:.4f}'.format(loss_val.item())+' acc_val: {:.4f}'.format(acc_val.item())+' time: {:.4f}s'.format(time.time() - t)+' AUC_train: {:.4f}'.format(auc_train.item())+' AUC_val: {:.4f}'.format(auc_val.item())+'\n')
+    result_detailed_file.write('Epoch: {:04d}'.format(epoch+1)+' loss_train: {:.4f}'.format(loss_train.item())+' acc_train: {:.4f}'.format(acc_train.item())+' loss_val: {:.4f}'.format(loss_val.item())+' acc_val: {:.4f}'.format(acc_val.item())+' time: {:.4f}s'.format(time.time() - t)+' AUC_train: {:.4f}'.format(auc_train.item())+' AUC_val: {:.4f}'.format(auc_val.item())+'\n')
     
     return auc_train,torch.exp(output).data.numpy()
 
-def train(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,o,max_val_auc,rdir,fold,classes_dict,tid2name,record):
-    #model.to(device).super().reset_parameters()
-    #model = GCN(nfeat=features.shape[1], nhid=hidden, nclass=labels.max().item() + 1, dropout=dropout)
-    #optimizer = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=weight_decay)
+def train(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,result_detailed_file,max_val_auc,rdir,fold,classes_dict,tid2name,record):
     t=time.time()
     model.train()
     optimizer.zero_grad()
@@ -282,7 +245,7 @@ def train(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,o,ma
     acc_val = accuracy(output[idx_val_in], labels[idx_val_in])
     auc_val = AUC(output[idx_val_in], labels[idx_val_in])
     print('Epoch: {:04d}'.format(epoch+1),'loss_train: {:.4f}'.format(loss_train.item()),'acc_train: {:.4f}'.format(acc_train.item()),'loss_val: {:.4f}'.format(loss_val.item()),'acc_val: {:.4f}'.format(acc_val.item()),'time: {:.4f}s'.format(time.time() - t),'AUC_train: {:.4f}'.format(auc_train.item()),'AUC_val: {:.4f}'.format(auc_val.item()))
-    o.write('Epoch: {:04d}'.format(epoch+1)+' loss_train: {:.4f}'.format(loss_train.item())+' acc_train: {:.4f}'.format(acc_train.item())+' loss_val: {:.4f}'.format(loss_val.item())+' acc_val: {:.4f}'.format(acc_val.item())+' time: {:.4f}s'.format(time.time() - t)+' AUC_train: {:.4f}'.format(auc_train.item())+' AUC_val: {:.4f}'.format(auc_val.item())+'\n')
+    result_detailed_file.write('Epoch: {:04d}'.format(epoch+1)+' loss_train: {:.4f}'.format(loss_train.item())+' acc_train: {:.4f}'.format(acc_train.item())+' loss_val: {:.4f}'.format(loss_val.item())+' acc_val: {:.4f}'.format(acc_val.item())+' time: {:.4f}s'.format(time.time() - t)+' AUC_train: {:.4f}'.format(auc_train.item())+' AUC_val: {:.4f}'.format(auc_val.item())+'\n')
     if auc_val>max_val_auc and record==1:
         o3=open(rdir+'/sample_prob_fold'+str(fold)+'_val.txt','w+')
         output_res=torch.exp(output[idx_val_in])
@@ -300,48 +263,15 @@ def train(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,o,ma
             c+=1
     return auc_val
 
-
-
-'''
-def test():
-    model.eval()
-    output=model(features,adj)
-    loss_test = torch.nn.functional.nll_loss(output[idx_test], labels[idx_test])
-    preds=output[idx_test].max(1)[1].type_as(labels[idx_test])
-    print(preds,labels[idx_test])
-    acc_test = accuracy(output[idx_test], labels[idx_test])
-    print("Test set results:","loss= {:.4f}".format(loss_test.item()),"accuracy= {:.4f}".format(acc_test.item()))
-
-def test_pred():
-    model.eval()
-    output=model(features,adj)
-    preds=output[idx_test].max(1)[1].type_as(labels[idx_test])
-    print(preds)
-'''
-
-#optimizer = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=weight_decay)
-'''
-if device:
-    model.cuda()
-    features = features.cuda()
-    adj = adj.cuda()
-    labels = labels.cuda()
-    idx_train = idx_train.cuda()
-    idx_val = idx_val.cuda()
-    idx_test = idx_test.cuda()
-'''
-
-def test(model,idx_test,features,adj,labels,o,max_test_auc,rdir,fn,classes_dict,tid2name,record):
+def test(model,idx_test,features,adj,labels,result_detailed_file,max_test_auc,rdir,fn,classes_dict,tid2name,record):
     model.eval()
     output=model(features,adj)
     loss_test=torch.nn.functional.nll_loss(output[idx_test], labels[idx_test])
     preds=output[idx_test].max(1)[1].type_as(labels[idx_test])
-    #print(preds,labels[idx_test])
-    #exit()
     acc_test=accuracy(output[idx_test],labels[idx_test])
     auc_test=AUC(output[idx_test], labels[idx_test])
     print(" | Test set results:","loss={:.4f}".format(loss_test.item()),"accuracy={:.4f}".format(acc_test.item()),"AUC={:.4f}".format(auc_test.item()))
-    o.write(" | Test set results:"+"loss={:.4f}".format(loss_test.item())+" accuracy: {:.4f}".format(acc_test.item())+" AUC: {:.4f}".format(auc_test.item())+'\n')
+    result_detailed_file.write(" | Test set results:"+"loss={:.4f}".format(loss_test.item())+" accuracy: {:.4f}".format(acc_test.item())+" AUC: {:.4f}".format(auc_test.item())+'\n')
     if auc_test>max_test_auc and record==1:
         o3=open(rdir+'/sample_prob_fold'+str(fn)+'_test.txt','w+')
         output_res=torch.exp(output[idx_test])
@@ -360,46 +290,25 @@ def test(model,idx_test,features,adj,labels,o,max_test_auc,rdir,fn,classes_dict,
     return auc_test
 
 def run_GCN_test(mlp_or_not,epochs,graph,node_file,outfile1,outfile2,input_sample):
-    '''
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hidden = 16
-    lr = 0.01
-    weight_decay = 5e-4
-    fastmode = 'store_true'
-    '''
-
     adj,features,labels,features_train,labels_train,idx_test,idx_train,classes_dict,tid2name=load_data(mlp_or_not,graph,node_file,input_sample)
-    #print(adj)
-    #exit()
     splits=StratifiedKFold(n_splits=10,shuffle=True,random_state=1234)
 
-    #print(np.array(features).shape)
-    #exit()
     epochs = epochs
-    total_num=len(labels)
     o1=open(outfile1,'w+')
     fn=0
     for train_idx,val_idx in splits.split(np.array(features_train),np.array(labels_train)):
-        #print('Fold {}'.format(fold+1))
         o1.write('Fold {}'.format(fn+1)+'\n')
-        #print(train_idx,val_idx)
-        #print(train_idx,val_idx)
-        #exit()
-
         model = GCN(nfeat=features.shape[1], nhid=hidden, nclass=labels.max().item() + 1, dropout=dropout)
         optimizer = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=weight_decay)
         for epoch in range(epochs):
             train(epoch,train_idx,val_idx,model,optimizer,features,adj,labels,o1)
             test(model,idx_test,features,adj,labels,o1)
         fn+=1
-        #test_pred()
     o1.close()
-    #o2=open(outfile2,'w+')
-    #calculate_avg_acc_of_cross_validation_test.cal_acc_cv(outfile1,outfile2)
+
 
 ####### Species style
 #run_GCN_test('gcn',500,'Graph_File_test_last_raw_Sp/sp_pca_knn_graph_final_trans_USA.txt','Node_File/species_node_feature.txt','Res_record_Sp/r1_USA_sp_lasso_gcn.txt','Res_record_Sp/r2_USA_sp_lasso_gcn.txt','sample_USA_new.txt')
-
 #run_GCN_test('gcn',500,'Graph_File_test_last_raw_Sp/sp_pca_knn_graph_final_trans_AUS.txt','Node_File/species_node_feature.txt','Res_record_Sp/r1_AUS_sp_lasso_gcn.txt','Res_record_Sp/r2_AUS_sp_lasso_gcn.txt','sample_AUS_new.txt')
 #run_GCN_test('gcn',500,'Graph_File_test_last_raw_Sp/sp_pca_knn_graph_final_trans_China.txt','Node_File/species_node_feature.txt','Res_record_Sp/r1_China_sp_lasso_gcn.txt','Res_record_Sp/r2_China_sp_lasso_gcn.txt','sample_China_new.txt')
 #run_GCN_test('gcn',500,'Graph_File_test_last_raw_Sp/sp_pca_knn_graph_final_trans_Denmark.txt','Node_File/species_node_feature.txt','Res_record_Sp/r1_Denmark_sp_lasso_gcn.txt','Res_record_Sp/r2_Denmark_sp_lasso_gcn.txt','sample_Denmark_new.txt')

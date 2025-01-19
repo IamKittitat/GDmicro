@@ -1,10 +1,8 @@
 import re
 import os
 import numpy as np
-from sklearn import preprocessing
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-#import matplotlib.pyplot as plt
 
 def load_ph(f):
     d={}
@@ -19,10 +17,9 @@ def load_ph(f):
             d['S'+ele[0]]=ele[3]
     return d
 
-
-def preprocess(infile,phenotype):
-    f1=open(infile,'r')
-    f2=open(phenotype,'r')
+def preprocess(embedding_vector_file,meta_file):
+    f1=open(embedding_vector_file,'r')
+    f2=open(meta_file,'r')
     d=load_ph(f2)
     X=[]
     y=[]
@@ -38,50 +35,35 @@ def preprocess(infile,phenotype):
             tem.append(float(e))
         X.append(tem)
     X=np.array(X)
-
     scaler=StandardScaler()
     X=scaler.fit_transform(X)
-    
-    #X=preprocessing.scale(X)
-    #print(X)
-    #exit()
+
     return X,y,samples
 
-
-def pca(X,y,samples,outfig,ptitle,omatrix):
-    #print(X,y)
+def pca(X,y,samples,omatrix):
     pca=PCA(n_components=0.95)
-    reduced_x=pca.fit_transform(X)
-    crc_x,crc_y=[],[]
-    health_x,health_y=[],[]
-    #print(reduced_x)
-    #print(len(X),len(reduced_x),len(y),y)
-    dname='' 
+    reduced_x = pca.fit_transform(X)
+    crc_x, crc_y, health_x, health_y = [], [], [], []
     for i in range(len(reduced_x)):
-        #print(len(reduced_x[i]))
-        if not y[i]=='Health':
-            if len(reduced_x[i])==1:
-                crc_x.append(reduced_x[i][0])
-                crc_y.append(0)
-            else:
-                crc_x.append(reduced_x[i][0])
-                crc_y.append(reduced_x[i][1])
-            dname=y[i]
-        else:
-            if len(reduced_x[i])==1:
-                health_x.append(reduced_x[i][0])
+        x_value = reduced_x[i]
+        x_0, x_1 = x_value[0], x_value[1]
+        label = y[i]
+
+        if label == 'Health':
+            if len(x_value)==1:
+                health_x.append(x_0)
                 health_y.append(0)
             else:
-                health_x.append(reduced_x[i][0])
-                health_y.append(reduced_x[i][1])
-    '''
-    plt.figure()
-    plt.scatter(crc_x,crc_y,c='r',marker='x',label=dname)
-    plt.scatter(health_x,health_y,c='g',marker='D',label='Health')
-    plt.legend()
-    plt.title(ptitle)
-    plt.savefig(outfig,dpi=400)
-    '''
+                health_x.append(x_0)
+                health_y.append(x_1)
+        else:
+            if len(x_value)==1:
+                crc_x.append(x_0)
+                crc_y.append(0)
+            else:
+                crc_x.append(x_0)
+                crc_y.append(x_1)
+            
     o=open(omatrix,'w+')
     i=0
     for s in samples:
@@ -92,11 +74,7 @@ def pca(X,y,samples,outfig,ptitle,omatrix):
         i+=1
     o.close()
 
-def run_pca(check1,check2,inmatrix,metadata,pre,out):
+def run_pca(check1,check2,embedding_vector_file,meta_file,pre,out):
     if os.path.exists(check1) or os.path.exists(check2):
-        X,y,samples=preprocess(inmatrix,metadata)
-        pca(X,y,samples,out+'/'+pre+'_pca_res.png',pre+'_extracted_features',out+'/'+pre+'_matrix_ef_pca.csv')
-
-#run_pca('species_associate.pdf','species_auc_run.txt','species_embedding_vector.txt','../../Graph_with_raw_data_from_paper_Merge/EMG_LOO_test_AUS_109/sample_phenotype.txt','species','train_embedding')
-
-
+        X,y,samples=preprocess(embedding_vector_file,meta_file)
+        pca(X,y,samples,out+'/'+pre+'_matrix_ef_pca.csv')
