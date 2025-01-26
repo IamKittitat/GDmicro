@@ -180,10 +180,10 @@ class GraphConvolution(Module):
         return self.__class__.__name__ + ' (' +str(self.in_features) + ' -> '+str(self.out_features) + ')'
 
 class GCN(nn.Module):
-    def __init__(self, nfeat, nhid, nclass, dropout):
+    def __init__(self, nfeat, hidden_layer, nclass, dropout):
         super(GCN, self).__init__()
-        self.gc1 = GraphConvolution(nfeat, nhid)
-        self.gc2 = GraphConvolution(nhid, nclass)
+        self.gc1 = GraphConvolution(nfeat, hidden_layer)
+        self.gc2 = GraphConvolution(hidden_layer, nclass)
         self.dropout = dropout
     def forward(self, x, adj):
         x = torch.nn.functional.relu(self.gc1(x, adj))
@@ -205,51 +205,29 @@ def AUC(output,labels):
     auc=metrics.auc(fpr,tpr)
     return auc
 
-def train_fs(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,result_detailed_file,max_val_auc,rdir,fold,classes_dict,tid2name,record):
+def train(epoch,train_idx,val_idx,model,optimizer,features,adj,labels,
+          result_detailed_file,max_val_auc,result_dir,fold,classes_dict,tid2name,record, save_val_results = False):
     t=time.time()
     model.train()
     optimizer.zero_grad()
     output=model(features,adj)
-    loss_train=torch.nn.functional.nll_loss(output[idx_train_in], labels[idx_train_in])
-    acc_train = accuracy(output[idx_train_in], labels[idx_train_in])
-    auc_train=AUC(output[idx_train_in], labels[idx_train_in])
+    loss_train=torch.nn.functional.nll_loss(output[train_idx], labels[train_idx])
+    acc_train = accuracy(output[train_idx], labels[train_idx])
+    auc_train=AUC(output[train_idx], labels[train_idx])
     loss_train.backward()
     optimizer.step()
 
-    #if not fastmode:
     model.eval()
     output=model(features,adj)
-    loss_val = torch.nn.functional.nll_loss(output[idx_val_in], labels[idx_val_in])
-    acc_val = accuracy(output[idx_val_in], labels[idx_val_in])
-    auc_val = AUC(output[idx_val_in], labels[idx_val_in])
+    loss_val = torch.nn.functional.nll_loss(output[val_idx], labels[val_idx])
+    acc_val = accuracy(output[val_idx], labels[val_idx])
+    auc_val = AUC(output[val_idx], labels[val_idx])
     print('Epoch: {:04d}'.format(epoch+1),'loss_train: {:.4f}'.format(loss_train.item()),'acc_train: {:.4f}'.format(acc_train.item()),'loss_val: {:.4f}'.format(loss_val.item()),'acc_val: {:.4f}'.format(acc_val.item()),'time: {:.4f}s'.format(time.time() - t),'AUC_train: {:.4f}'.format(auc_train.item()),'AUC_val: {:.4f}'.format(auc_val.item()))
     result_detailed_file.write('Epoch: {:04d}'.format(epoch+1)+' loss_train: {:.4f}'.format(loss_train.item())+' acc_train: {:.4f}'.format(acc_train.item())+' loss_val: {:.4f}'.format(loss_val.item())+' acc_val: {:.4f}'.format(acc_val.item())+' time: {:.4f}s'.format(time.time() - t)+' AUC_train: {:.4f}'.format(auc_train.item())+' AUC_val: {:.4f}'.format(auc_val.item())+'\n')
-    
-    return auc_train,torch.exp(output).data.numpy()
-
-def train(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,result_detailed_file,max_val_auc,rdir,fold,classes_dict,tid2name,record):
-    t=time.time()
-    model.train()
-    optimizer.zero_grad()
-    output=model(features,adj)
-    loss_train=torch.nn.functional.nll_loss(output[idx_train_in], labels[idx_train_in])
-    acc_train = accuracy(output[idx_train_in], labels[idx_train_in])
-    auc_train=AUC(output[idx_train_in], labels[idx_train_in])
-    loss_train.backward()
-    optimizer.step()
-
-    #if not fastmode:
-    model.eval()
-    output=model(features,adj)
-    loss_val = torch.nn.functional.nll_loss(output[idx_val_in], labels[idx_val_in])
-    acc_val = accuracy(output[idx_val_in], labels[idx_val_in])
-    auc_val = AUC(output[idx_val_in], labels[idx_val_in])
-    print('Epoch: {:04d}'.format(epoch+1),'loss_train: {:.4f}'.format(loss_train.item()),'acc_train: {:.4f}'.format(acc_train.item()),'loss_val: {:.4f}'.format(loss_val.item()),'acc_val: {:.4f}'.format(acc_val.item()),'time: {:.4f}s'.format(time.time() - t),'AUC_train: {:.4f}'.format(auc_train.item()),'AUC_val: {:.4f}'.format(auc_val.item()))
-    result_detailed_file.write('Epoch: {:04d}'.format(epoch+1)+' loss_train: {:.4f}'.format(loss_train.item())+' acc_train: {:.4f}'.format(acc_train.item())+' loss_val: {:.4f}'.format(loss_val.item())+' acc_val: {:.4f}'.format(acc_val.item())+' time: {:.4f}s'.format(time.time() - t)+' AUC_train: {:.4f}'.format(auc_train.item())+' AUC_val: {:.4f}'.format(auc_val.item())+'\n')
-    if auc_val>max_val_auc and record==1:
-        o3=open(rdir+'/sample_prob_fold'+str(fold)+'_val.txt','w+')
-        output_res=torch.exp(output[idx_val_in])
-        output_res=output_res.data.numpy()
+    if save_val_results and auc_val>max_val_auc and record==1:
+        o3=open(result_dir+'/sample_prob_fold'+str(fold)+'_val.txt','w+')
+        output_res=torch.exp(output[val_idx]).data.numpy()
+        
         c=0
         dt={}
         for n in classes_dict:
@@ -258,12 +236,13 @@ def train(epoch,idx_train_in,idx_val_in,model,optimizer,features,adj,labels,resu
             else:
                 dt[1]=n
         for a in output_res:
-            nt=labels[idx_val_in[c]].data.numpy()
-            o3.write(tid2name[int(idx_val_in[c])]+'\t'+str(a[0])+'\t'+str(a[1])+'\t'+str(labels[idx_val_in[c]].data.numpy())+'\t'+str(dt[int(nt)])+'\n')
+            nt=labels[val_idx[c]].data.numpy()
+            o3.write(tid2name[int(val_idx[c])]+'\t'+str(a[0])+'\t'+str(a[1])+'\t'+str(labels[val_idx[c]].data.numpy())+'\t'+str(dt[int(nt)])+'\n')
             c+=1
-    return auc_val
+    
+    return auc_train, auc_val, torch.exp(output).data.numpy()
 
-def test(model,idx_test,features,adj,labels,result_detailed_file,max_test_auc,rdir,fn,classes_dict,tid2name,record):
+def test(model,idx_test,features,adj,labels,result_detailed_file,max_test_auc,result_dir,fn,classes_dict,tid2name,record):
     model.eval()
     output=model(features,adj)
     loss_test=torch.nn.functional.nll_loss(output[idx_test], labels[idx_test])
@@ -273,7 +252,7 @@ def test(model,idx_test,features,adj,labels,result_detailed_file,max_test_auc,rd
     print(" | Test set results:","loss={:.4f}".format(loss_test.item()),"accuracy={:.4f}".format(acc_test.item()),"AUC={:.4f}".format(auc_test.item()))
     result_detailed_file.write(" | Test set results:"+"loss={:.4f}".format(loss_test.item())+" accuracy: {:.4f}".format(acc_test.item())+" AUC: {:.4f}".format(auc_test.item())+'\n')
     if auc_test>max_test_auc and record==1:
-        o3=open(rdir+'/sample_prob_fold'+str(fn)+'_test.txt','w+')
+        o3=open(result_dir+'/sample_prob_fold'+str(fn)+'_test.txt','w+')
         output_res=torch.exp(output[idx_test])
         output_res=output_res.data.numpy()
         c=0
@@ -298,7 +277,7 @@ def run_GCN_test(mlp_or_not,epochs,graph,node_file,outfile1,outfile2,input_sampl
     fn=0
     for train_idx,val_idx in splits.split(np.array(features_train),np.array(labels_train)):
         o1.write('Fold {}'.format(fn+1)+'\n')
-        model = GCN(nfeat=features.shape[1], nhid=hidden, nclass=labels.max().item() + 1, dropout=dropout)
+        model = GCN(nfeat=features.shape[1], hidden_layer=hidden, nclass=labels.max().item() + 1, dropout=dropout)
         optimizer = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=weight_decay)
         for epoch in range(epochs):
             train(epoch,train_idx,val_idx,model,optimizer,features,adj,labels,o1)

@@ -6,9 +6,6 @@ import torch.utils.data as Data
 from torch.optim import SGD,Adam
 from sklearn.metrics import accuracy_score
 from sklearn import metrics
-#import matplotlib.pyplot as plt
-#import hiddenlayer as hl
-import os
 import merge_embedding_vector
 import build_graph_with_embedding
 import mmd
@@ -403,9 +400,9 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
 
 
     if close_cv==0:
-        merge_embedding_vector.merge(ofile1,ofile2,ofile3,train_idx,val_idx,test_idx,odir+'/merge_embedding_Fold'+str(fn)+'.txt')
+        merge_embedding_vector.merge_data([ofile1,ofile2,ofile3],[train_idx,val_idx,test_idx],odir+'/merge_embedding_Fold'+str(fn)+'.txt')
     else:
-        merge_embedding_vector.merge2(ofile1,ofile3,train_idx,test_idx,odir+'/merge_embedding_Fold'+str(fn)+'.txt')
+        merge_embedding_vector.merge_data([ofile1,ofile3],[train_idx,test_idx],odir+'/merge_embedding_Fold'+str(fn)+'.txt')
     build_graph_with_embedding.build(odir+'/merge_embedding_Fold'+str(fn)+'.txt',inmetaf,'eggNOG',odir+'/Fold'+str(fn),kneighbor,rdir+"/sample_kneighbors_all_fold"+str(fn)+".txt")
     graph=odir+'/Fold'+str(fn)+'/P3_build_graph/eggNOG_pca_knn_graph_final.txt'
     return graph

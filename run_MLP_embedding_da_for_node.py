@@ -3,14 +3,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
-from torch.optim import SGD,Adam
-from sklearn.metrics import accuracy_score
 from sklearn import metrics
-#import matplotlib.pyplot as plt
-#import hiddenlayer as hl
-import os
 import merge_embedding_vector
-import build_graph_with_embedding
 import mmd
 import math
 import random
@@ -21,8 +15,6 @@ def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     torch.backends.cudnn.deterministic=True
-
-
 
 class MLPclassifica(nn.Module):
     def __init__(self,nfeat):
@@ -57,7 +49,6 @@ class MLPclassifica(nn.Module):
             target=self.hidden1(target)
             loss+=mmd.mmd_rbf_noaccelerate(source,target)
 
-        #fc1=self.hidden1(source)
         self.featuremap=source.detach()
         fc2=self.hidden2(source)
         output=self.classifica(fc2)
@@ -73,13 +64,6 @@ def load_data(inmatrixf,inmetaf,train_idx,val_idx,test_idx,disease,wwl):
     inmatrix_train=inmatrix.iloc[:,train_idx]
     inmatrix_val=inmatrix.iloc[:,val_idx]
     inmatrix_test=inmatrix.iloc[:,test_idx]
-
-    #print(inmatrix_train,inmatrix_train.shape)
-    #exit()
-    #inmatrix=inmatrix.T
-    #print(inmatrix)
-    #print(inmatrix.shape)
-    #exit()
 
     inmeta=pd.read_table(inmetaf)
 
@@ -148,7 +132,6 @@ def trans_embedding_node(inembed,insp,onode):
     o.close()
 
     
-    
 
 def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx,kneighbor,rseed,wwl,rdir,close_cv,insp):
     if not rseed==0:
@@ -158,12 +141,8 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
     if close_cv==0:
         ofile2=odir+'/feature_out_val_fnode_Fold'+str(fn)+'_eggNOG.txt'
     ofile3=odir+'/feature_out_test_fnode_Fold'+str(fn)+'_eggNOG.txt'
-    #print(train_idx,val_idx)
-    #exit()
     # Load datasets
     X_train,X_val,X_test,y_train,y_val,y_test=load_data(inmatrixf,inmetaf,train_idx,val_idx,test_idx,disease,wwl)
-    #print(y_train,y_test)
-    #exit()
     #trans vector to tensor
     X_train_nots=torch.from_numpy(X_train.astype(np.float32))
     y_train_t=torch.from_numpy(y_train.astype(np.int64))
@@ -213,8 +192,6 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
         optimizer=torch.optim.Adam(model.parameters(),lr=0.01,weight_decay=1e-5)
         loss_func=nn.CrossEntropyLoss()
 
-        #history1=hl.History()
-        #canvas1=hl.Canvas()
         print_step=25
 
         src_iter=iter(train_nots_loader)
@@ -234,23 +211,14 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
                 tgt_iter=iter(test_nots_loader_train)
                 tgt_data,_=tgt_iter.next()
            
-            #print(tgt_data.shape)
             optimizer.zero_grad()
             src_pred,mmd_loss=model(src_data,tgt_data)
-            #print(mmd_loss)
-            #exit()
             cls_loss=loss_func(src_pred,src_label)
             lambd=2 / (1 + math.exp(-10 * (epoch) / 100)) - 1
             loss=cls_loss+lambd*mmd_loss
             loss.backward()
             optimizer.step()
-            #print(src_pred)
-            #src_pred=src_pred.detach().numpy()
-            #print(src_label)
-            #exit()
             train_acc=accuracy(src_pred,src_label)
-            #print(train_acc)
-            #exit()
             if epoch % 10 ==0 and close_cv==0:
                 model.eval()
 
@@ -261,57 +229,9 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
         else:
             print('Train iter: {} [({:.0f}%)]\tLoss: {:.6f}\tsoft_Loss: {:.6f}\tmmd_Loss: {:.6f}\tTrain_accuracy:'.format(epoch, 100. * epoch / 100, loss.item(), cls_loss.item(), mmd_loss.item()),train_acc)
 
-                
-
-            '''
-            for step, (b_x, b_y) in enumerate(train_nots_loader):
-                _,_,output=mlpc(b_x)
-                ftr1=mlpc.featuremap.cpu()
-                
-                _,_,output_t2=mlpc(X_train_nots)
-                ftr1=mlpc.featuremap.cpu()
-                _,_,output_t2=mlpc(X_val_nots)
-                ftv1=mlpc.featuremap.cpu()
-                _,_,output_t2=mlpc(X_test_nots)
-                fte1=mlpc.featuremap.cpu()
-                x = torch.cat([ftr1, ftv1, fte1], dim=0)
-                temx=np.array(x)
-                mu=np.mean(temx,axis=0)
-                var=np.var(temx,axis=0)
-                mu=torch.FloatTensor(mu)
-                var=torch.FloatTensor(var)
-
-                train_loss=0.5*loss_func(output,b_y)+0.5*kl_gaussian_loss(mu,var)
-                optimizer.zero_grad()
-                train_loss.backward()
-                optimizer.step()
-                niter=epoch*len(train_nots_loader)+step+1
-
-                #feature_output=mlpc.featuremap.cpu()
-                #feature_out=np.array(feature_output)
-                if niter%print_step==0:
-                    _,_,output=mlpc(X_val_nots)
-                    _,pre_lab=torch.max(output,1)
-                    val_accuracy=accuracy_score(y_val_t,pre_lab)
-                    val_auc=AUC(output,y_val_t)
-
-                    _,_,output=mlpc(X_test_nots)
-                    _,pre_lab=torch.max(output,1)
-                    test_accuracy=accuracy_score(y_test_t,pre_lab)
-                    test_auc=AUC(output,y_test_t)
-                    #print(niter,test_accuracy)
-                    history1.log(niter,train_loss=train_loss,test_accuracy=test_accuracy,test_AUC=test_auc)
-                    with canvas1:
-                        canvas1.draw_plot(history1["train_loss"])
-                        canvas1.draw_plot(history1["test_accuracy"])
-                        canvas1.draw_plot(history1["test_AUC"])
-            '''
-        #exit()
-        #plt.savefig(odir+"/result.png",dpi=400)
         ######### Test the model ##########
         model.eval()    
         output,mmd_loss=model(X_train_nots,X_test_nots)
-        #_,pre_lab=torch.max(output,1)
         feature_output=model.featuremap.cpu()
         feature_out=np.array(feature_output)
         train_acc=accuracy(output,y_train_t)
@@ -319,7 +239,6 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
         print("train_accuracy:",train_acc,"train_AUC:",train_auc)
         if close_cv==0:
             output,mmd_loss=model(X_val_nots,X_test_nots)
-            #_,pre_lab=torch.max(output,1)
             feature_output_val=model.featuremap.cpu()
             feature_out_val=np.array(feature_output_val)
             val_accuracy=accuracy(output,y_val_t)
@@ -327,14 +246,12 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
             print("val_accuracy:",val_accuracy,"val_AUC:",val_auc)
 
         output,mmd_loss=model(X_test_nots,X_test_nots)
-        #_,pre_lab=torch.max(output,1)
         feature_output_test=model.featuremap.cpu()
         feature_out_test=np.array(feature_output_test)
         if wwl==1:
             test_accuracy=accuracy(output,y_test_t)
             test_auc=AUC(output,y_test_t)
             print("test_accuracy:",test_accuracy,"test_AUC:",test_auc)
-        #exit()
             if close_cv==0:
                 o.write("Train accuracy: "+str(train_acc)+" Train AUC: "+str(train_auc)+"\nVal accuracy: "+str(val_accuracy)+" Val AUC: "+str(val_auc)+"\nTest accuracy: "+str(test_accuracy)+" Test AUC: "+str(test_auc)+'\n')
             else:
@@ -385,18 +302,14 @@ def build_graph_mlp(inmatrixf,train_idx,val_idx,inmetaf,disease,fn,odir,test_idx
 
 
     if close_cv==0:
-        merge_embedding_vector.merge(ofile1,ofile2,ofile3,train_idx,val_idx,test_idx,odir+'/merge_embedding_fnode_Fold'+str(fn)+'.txt')
+        merge_embedding_vector.merge_data([ofile1,ofile2,ofile3],[train_idx,val_idx,test_idx],odir+'/merge_embedding_fnode_Fold'+str(fn)+'.txt')
     else:
-        merge_embedding_vector.merge2(ofile1,ofile3,train_idx,test_idx,odir+'/merge_embedding_fnode_Fold'+str(fn)+'.txt')
+        merge_embedding_vector.merge_data([ofile1,ofile3],[train_idx,test_idx],odir+'/merge_embedding_fnode_Fold'+str(fn)+'.txt')
     
     trans_embedding_node(odir+'/merge_embedding_fnode_Fold'+str(fn)+'.txt',insp,odir+'/merge_embedding_fnode_Fold'+str(fn)+'_node.txt')
-    #build_graph_with_embedding.build(odir+'/merge_embedding_Fold'+str(fn)+'.txt',inmetaf,'eggNOG',odir+'/Fold'+str(fn),kneighbor,rdir+"/sample_kneighbors_all_fold"+str(fn)+".txt")
-    #graph=odir+'/Fold'+str(fn)+'/P3_build_graph/eggNOG_pca_knn_graph_final.txt'
     out_node=odir+'/merge_embedding_fnode_Fold'+str(fn)+'_node.txt'
     return out_node
 
-
- 
 
 #graph=build_graph_mlp('../New_datasets/T2D_data_2012_Trans/T2D_eggNOG_norm.txt',list(range(340)),list(range(340,363)),'../New_datasets/T2D_data_2012_Trans/T2D_meta.tsv','T2D',1,'T2D_result/Graph_File')
 #print(graph)

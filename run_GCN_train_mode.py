@@ -5,7 +5,7 @@ import pandas as pd
 import scipy.sparse as sp
 from sklearn.model_selection import StratifiedKFold
 import run_MLP_embedding_train_mode
-from gcn_model_train_mode import encode_onehot,GCN,train,train_fs,normalize,sparse_mx_to_torch_sparse_tensor
+from gcn_model_train_mode import encode_onehot,GCN,train,normalize,sparse_mx_to_torch_sparse_tensor
 from calculate_avg_acc_of_cross_validation_train_mode import cal_acc_cv
 import torch
 from sklearn.metrics.pairwise import cosine_similarity
@@ -25,8 +25,8 @@ def build_dir(inp):
     if not os.path.exists(inp):
         os.makedirs(inp)
 
-def select_features(eg_fs,eg_fs_norm,train_idx,feature_dir,meta_file,disease,fold_number):
-    inmatrix=pd.read_table(eg_fs)
+def select_features(train_raw,node_raw,train_idx,feature_dir,meta_file,disease,fold_number):
+    inmatrix=pd.read_table(train_raw)
     inmatrix=inmatrix.iloc[:,train_idx]
     inmatrix.to_csv("tem_e.tsv",sep="\t")
     f=open("tem_e.tsv",'r')
@@ -70,7 +70,7 @@ def select_features(eg_fs,eg_fs_norm,train_idx,feature_dir,meta_file,disease,fol
     print(':: Log: There are '+str(len(d))+'/'+str(t)+' features selected!\n')
     os.system('mv eggNOG_feature_weight.csv '+feature_dir+'/eggNOG_feature_weight_Fold'+str(fold_number)+'.csv')
     os.system('mv eggNOG_evaluation.pdf '+feature_dir+'/eggNOG_evaluation_Fold'+str(fold_number)+'.pdf')
-    f3=open(eg_fs_norm,'r')
+    f3=open(node_raw,'r')
     line=f3.readline()
     o2=open('tem_e3.tsv','w+')
     o2.write(line)
@@ -92,14 +92,14 @@ def hard_case_split(infeatures,inlabels):
     dist=cosine_similarity(infeatures,infeatures)
     dist_abs=np.maximum(dist,-dist)
     did2d={} # ID -> Minimum distance
-    sid=0
+    species_id=0
     for s in dist_abs:
         res=np.argsort(s)[::-1]
         for r in res:
-            if r==sid:continue
+            if r==species_id:continue
             did2d[r]=s[r]
             break
-        sid+=1
+        species_id+=1
     res=sorted(did2d.items(), key = lambda kv:(kv[1], kv[0])) 
     res_half=res[:int(len(res)/2)]
     candidate_crc=[]
@@ -152,14 +152,12 @@ def avg_score(avc,vnsa):
             avc[s]['Decrease2Health'] = sum(avc[s]['Decrease2Health']) / vnsa[s]
     return avc
 
-def iter_run(features,train_id,test_id , adj, labels, ot2, result_dir,classes_dict, tid2name):
-
-    model = GCN(nfeat=features.shape[1], nhid=32, nclass=labels.max().item() + 1, dropout=0.5)
+def iter_run(features,train_idx,test_id , adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId):
+    model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
-    # val_idx=test_id
     max_train_auc = 0
     for epoch in range(150):
-        train_auc, train_prob = train_fs(epoch, np.array(train_id), np.array(test_id), model, optimizer, features, adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, tid2name,  0)
+        train_auc, _, train_prob = train(epoch, np.array(train_idx), np.array(test_id), model, optimizer, features, adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, idx_to_subjectId,  0)
         train_auc = float(train_auc)
         if train_auc > max_train_auc:
             max_train_auc = train_auc
@@ -167,10 +165,10 @@ def iter_run(features,train_id,test_id , adj, labels, ot2, result_dir,classes_di
 
     return best_prob
 
-def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, test_id, result_dir,ot2,classes_dict, tid2name,sid,sname,fold_number):
+def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_idx, test_id, result_dir,ot2,classes_dict, idx_to_subjectId,species_id,sname,fold_number):
     setup_seed(10)
     dn={}
-    idx_features_labels = np.genfromtxt("{}".format(eg_fs_norm), dtype=np.dtype(str))
+    idx_features_labels = np.genfromtxt("{}".format(node_raw), dtype=np.dtype(str))
     features = idx_features_labels[:, 1:-1]
     features = features.astype(float)
     features = np.array(features)
@@ -197,9 +195,9 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
     for s in dn:
         p=0
         n=0
-        if s not in train_id:continue
+        if s not in train_idx:continue
         for s2 in dn[s]:
-            if s2 not in train_id:continue
+            if s2 not in train_idx:continue
             if labels_raw[s2]=='Health':
                 n+=1
             else:
@@ -207,12 +205,12 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
         if p>=0 and n>=0:
             tg.append(s)
     print('There are '+str(len(tg))+' samples have both >=0 healthy and disease neighbors.')
-    model = GCN(nfeat=features.shape[1], nhid=32, nclass=labels.max().item() + 1, dropout=0.5)
+    model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
     max_train_auc=0
     for epoch in range(150):
         print('DSD_Raw')
-        train_auc, train_prob = train_fs(epoch, np.array(train_id), np.array(test_id), model, optimizer, features,adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, tid2name, 0)
+        train_auc, _, train_prob = train(epoch, np.array(train_idx), np.array(test_id), model, optimizer, features,adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, idx_to_subjectId, 0)
         train_auc = float(train_auc)
         if train_auc > max_train_auc:
             max_train_auc = train_auc
@@ -232,8 +230,6 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
     arr=[] # sample_id list
     for t  in tgc:
         arr.append(t)
-        tem_train=train_id.copy()
-        # tem_train.remove(t)
         raw_prob=best_prob[t][1]
         c_feature=features_raw.copy()
         t_feature=c_feature[t]
@@ -242,7 +238,7 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
         ab_min=np.min(t_feature)
         res[t]={}
         for s in feature_id:
-            if s not in sid:continue
+            if s not in species_id:continue
             res[t][s]=['-1','-1','-1','-1','-1','-1','-1']
             res[t][s][0]=str(raw_prob)
             raw_feature_value=t_feature[s]
@@ -271,8 +267,8 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
                 set_index.append(4)
 
 
-            bp1 = iter_run(features_one, train_id,test_id, adj, labels, ot2, result_dir,classes_dict, tid2name)
-            bp2 = iter_run(features_two, train_id, test_id, adj, labels, ot2, result_dir, classes_dict, tid2name)
+            bp1 = iter_run(features_one, train_idx,test_id, adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId)
+            bp2 = iter_run(features_two, train_idx, test_id, adj, labels, ot2, result_dir, classes_dict, idx_to_subjectId)
             res[t][s][set_index[0]]= str(bp1[t][1])
             res[t][s][set_index[1]] = str(bp2[t][1])
     health_lab=0
@@ -280,10 +276,8 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
         if c=='Health':
             if classes_dict['Health'][0]==1:
                 health_lab=0
-                disease_lab=1
             else:
                 health_lab = 1
-                disease_lab = 0
 
     # Increase abundance (3, 5, 6) -> close to CRC or close to Health | Decrease abundance (1, 2, 4) -> close to CRC or close to Health
     # Raw: 0: raw_prob, Max: 1: Max2Median, 2: Max2Zero, Middle: 3: Middle2Max, 4: Middle2Zero, Zero: 5: Zero2Median, 6: Zero2Max
@@ -293,18 +287,18 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
     dab=[1,2,4]
     avc={} # Calculate average change of each feature across disease and healthy samples
             # feature_name-> Disease: change_value | Health: change_value
-    sp_name = dict(zip(sid, sname))
+    sp_name = dict(zip(species_id, sname))
 
     o.write('Sample_ID\tLabel\t'+'\t'.join(sname)+'\n')
 
     # Calculate valid samples
-    vsa={} # sid -> valid sample
+    vsa={} # species_id -> valid sample
     vnsa={} # sname -> valid sample
     for t in res:
         #valid=0
         for s in feature_id:
             valid=0
-            if s not in sid: continue
+            if s not in species_id: continue
             if s not in vsa:
                 vsa[s]=0
                 vnsa[sp_name[s]]=0
@@ -333,7 +327,7 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
         tem=[]
         # tid=0
         for s in feature_id:
-            if s not in sid: continue
+            if s not in species_id: continue
             tem.append(','.join(res[t][s]))
             if sp_name[s] not in avc:
                 avc[sp_name[s]] = {'Increase2Disease': [], 'Increase2Health':[], 'Decrease2Disease': [],
@@ -409,10 +403,12 @@ def detect_dsp(graph, eg_fs_norm,feature_id, labels_raw,labels,adj, train_id, te
         o2.write(str(c)+'\t'+s+'\t'+str(avc[s]['Increase2Disease'])+'\t'+str(avc[s]['Increase2Health'])+'\t'+str(avc[s]['Decrease2Disease'])+'\t'+str(avc[s]['Decrease2Health'])+'\t'+str(vnsa[s])+'\n')
         c+=1
 
-def feature_importance_check(selected,selected_arr,feature_id,train_idx,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,tid2name,o3,ot,dcs,fnum,o4):
+def feature_importance_check(feature_id,train_idx,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,idx_to_subjectId,feat_imp_fold_file,ot,species_name,fnum,feat_imp_local_file):
     setup_seed(10)
     cround=1
     top100={}
+    selected = {}
+    selected_arr = []
     while True:
         res={}
         prob_matrix = []
@@ -424,10 +420,10 @@ def feature_importance_check(selected,selected_arr,feature_id,train_idx,val_idx,
             if i in selected:continue
             features_tem=[[x[i]] for x in features]
             features_tem=torch.Tensor(features_tem)
-            model=GCN(nfeat=features_tem.shape[1], nhid=32, nclass=labels.max().item() + 1, dropout=0.5)
+            model=GCN(nfeat=features_tem.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
             optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
             for epoch in range(50):
-                train_auc,sample_prob=train_fs(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features_tem,adj,labels,ot,max_train_auc,result_dir,fold_number+1,classes_dict,tid2name,0)
+                train_auc, _, sample_prob = train(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features_tem,adj,labels,ot,max_train_auc,result_dir,fold_number+1,classes_dict,idx_to_subjectId,0)
                 train_auc=float(train_auc)
                 if train_auc>max_train_auc:
                     max_train_auc=train_auc
@@ -435,27 +431,26 @@ def feature_importance_check(selected,selected_arr,feature_id,train_idx,val_idx,
             res[i]=float(max_train_auc)
             prob_matrix.append(best_prob[:, 1])
         res2=sorted(res.items(), key = lambda kv:(kv[1], kv[0]), reverse = True)
-        sid=1
+        species_id=1
         if cround==1:
             for r in res2:
-                #if sid==fnum+1:break
-                o3.write(str(sid)+'\t'+str(dcs[r[0]])+'\t'+str(r[1])+'\n')
-                if sid<fnum+1:
-                    top100[int(r[0])]=str(dcs[r[0]])
-                sid+=1
-            o3.close()
+                feat_imp_fold_file.write(str(species_id)+'\t'+str(species_name[r[0]])+'\t'+str(r[1])+'\n')
+                if species_id<fnum+1:
+                    top100[int(r[0])]=str(species_name[r[0]])
+                species_id+=1
+            feat_imp_fold_file.close()
         selected[res2[0][0]]=res2[0][1]
         selected_arr.append(res2[0][0])
         cround+=1
         prob_matrix = np.array(prob_matrix).T
-        savetxt(o4, prob_matrix, delimiter=',')
-    sid=sorted(list(top100.keys()))
+        savetxt(feat_imp_local_file, prob_matrix, delimiter=',')
+    species_id=sorted(list(top100.keys()))
     sname=[]
-    for s in sid:
+    for s in species_id:
         sname.append(top100[s])
-    return sid,sname
+    return species_id,sname
 
-def node_importance_check(selected,selected_arr,tem_train_id,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,tid2name,o5,o6,ot2,nnum):
+def node_importance_check(selected,selected_arr,tem_train_id,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,idx_to_subjectId,o5,o6,ot2,nnum):
     cround=1
     while True:
         res={}
@@ -466,29 +461,29 @@ def node_importance_check(selected,selected_arr,tem_train_id,val_idx,features,ad
             if i in selected:continue
             if i in val_idx:continue
             train_idx=selected_arr+[i]
-            model=GCN(nfeat=features.shape[1], nhid=32, nclass=labels.max().item() + 1, dropout=0.5)
+            model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
             optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
             for epoch in range(50):
-                val_auc=train(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features,adj,labels,ot2,max_val_auc,result_dir,fold_number+1,classes_dict,tid2name,0)
+                _, val_auc, _ = train(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features,adj,labels,ot2,max_val_auc,result_dir,fold_number+1,classes_dict,idx_to_subjectId,0, save_val_results=True)
                 val_auc=float(val_auc)
                 if val_auc>max_val_auc:
                     max_val_auc=val_auc
             res[i]=float(max_val_auc)
         res2=sorted(res.items(), key = lambda kv:(kv[1], kv[0]), reverse = True)
-        sid=1
+        species_id=1
         if cround==1:
             for r in res2:
-                if sid==nnum+1:break
-                o5.write(str(sid)+'\t'+str(tid2name[r[0]])+'\t'+str(r[1])+'\n')
-                sid+=1
+                if species_id==nnum+1:break
+                o5.write(str(species_id)+'\t'+str(idx_to_subjectId[r[0]])+'\t'+str(r[1])+'\n')
+                species_id+=1
             o5.close()
         selected[res2[0][0]]=res2[0][1]
         selected_arr.append(res2[0][0])
         cround+=1
-    sid=1
+    species_id=1
     for r in selected_arr:
-        o6.write(str(sid)+'\t'+str(tid2name[r])+'\t'+str(selected[r])+'\n')
-        sid+=1
+        o6.write(str(species_id)+'\t'+str(idx_to_subjectId[r])+'\t'+str(selected[r])+'\n')
+        species_id+=1
     o6.close()
 
 def trans_node(infile,meta_file,ofile):
@@ -512,31 +507,56 @@ def trans_node(infile,meta_file,ofile):
         c+=1
     o.close()
 
-def load_dcs(infile,dcs):
-    f=open(infile,'r')
-    line=f.readline()
-    cs=0
-    while True:
-        line=f.readline().strip()
-        if not line:break
-        ele=line.split('\t')
-        dcs[cs]=ele[0]
-        cs+=1
+def load_species_name(train_norm):
+    species_name = {}
+    with open(train_norm, 'r') as f:
+        next(f)  # Skip the header line
+        for cs, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            ele = line.split('\t')
+            species_name[cs] = ele[0]
+    return species_name
  
-# check2,eg_fs=load_var(eg_fs,indir+'/'+disease+'_train_sp_raw.csv')
-# check3,eg_fs_norm=load_var(eg_fs_norm,indir+'/'+disease+'_sp_train_raw_node.csv')
-def run(node_norm,eg_fs,eg_fs_norm,meta_file,disease,out,kneighbor,rseed,cvfold,train_norm,fnum,nnum,pre_features,anode,reverse,uf,rfi):
-    if not rseed==0:
+def load_metadata(meta_file):
+    idx_to_subjectId = {}
+    test_idx = []
+    train_idx = 0
+
+    with open(meta_file, 'r') as fm:
+        next(fm)  
+        for c, line in enumerate(fm):
+            line = line.strip()
+            if not line:
+                continue
+
+            ele = line.split()
+            idx_to_subjectId[c] = ele[2]
+
+            if ele[-1] == 'test':
+                test_idx.append(c)
+            if ele[-1] in ['train', 'test']:
+                train_idx = c
+
+    train_idx += 1
+    test_idx = np.array(test_idx)
+    return idx_to_subjectId, test_idx, train_idx
+
+def run(node_norm,train_raw,node_raw,meta_file,disease,out,kneighbor,rseed,cvfold,train_norm,fnum,nnum,anode,run_feature_importance):
+    if rseed != 0:
         setup_seed(rseed)
-    dcs={}
-    load_dcs(train_norm,dcs)
+    
+    species_name = load_species_name(train_norm)
+
     idx_features_labels = np.genfromtxt("{}".format(node_norm),dtype=np.dtype(str))
     features=idx_features_labels[:, 1:-1] # Remove idx, labels
     features=features.astype(float)
     features=np.array(features)
 
+    # Value: Health or {Disease Name (Ex. T2D)}
     labels_raw = idx_features_labels[:, -1]
-    labels_raw=np.array(labels_raw)
+    labels_raw = np.array(labels_raw)
 
     splits=StratifiedKFold(n_splits=cvfold,shuffle=True,random_state=1234)
 
@@ -550,57 +570,22 @@ def run(node_norm,eg_fs,eg_fs_norm,meta_file,disease,out,kneighbor,rseed,cvfold,
     result_detailed_dir = result_dir+'/r1.txt'
     result_summary_dir = result_dir+'/r2.txt'
 
-    tid2name={}
-    fm=open(meta_file,'r')
-    line=fm.readline()
-    tid2name={}
-    test_idx=[]
-    c=0
-    train_id=0
-    while True:
-        line=fm.readline().strip()
-        if not line:break
-        ele=line.split()
-        tid2name[c]=ele[2]
-        if ele[-1]=='test':
-            test_idx.append(c)
-        if ele[-1]=='train' or ele[-1]=='test':
-            train_id=c
-        c+=1
-    train_id=train_id+1
+    idx_to_subjectId, test_idx, train_idx = load_metadata(meta_file)
+    train_idx=train_idx+1
     test_idx=np.array(test_idx)
     
     result_detailed_file=open(result_detailed_dir,'w+')
     fold_number=0
 
-    for train_idx,val_idx in splits.split(features[:train_id],labels_raw[:train_id]):
+    for train_idx,val_idx in splits.split(features[:train_idx],labels_raw[:train_idx]):
         result_detailed_file.write('Fold {}'.format(fold_number+1)+'\n')
         print('Fold {}'.format(fold_number+1)+', Train:'+str(len(train_idx))+' Test:'+str(len(val_idx)))
 
-        # NOT USED BY DEFAULT VALUES OF uf, reverse
-        # if uf==0:
-        #     if len(pre_features)==0:
-        #         eg_fs_sf=select_features(eg_fs,eg_fs_norm,train_idx,feature_dir,meta_file,disease,fold_number+1)
-        #     else:
-        #         eg_fs_sf=pre_features[fold_number+1]
-        # if reverse==1:
-        #     otem=uuid.uuid1().hex+'.csv'
-        #     idx_features_labels = np.genfromtxt("{}".format(otem),dtype=np.dtype(str))
-        #     features=idx_features_labels[:, 1:-1]
-        #     features=features.astype(float)
-        #     features=np.array(features)
-        #     os.system('rm '+otem)
-        #     dcs={}
-        #     load_dcs(eg_fs_sf,dcs)
-        # if reverse==0 and uf==0:
-        #     graph=run_MLP_embedding_train_mode.build_graph_mlp(eg_fs_sf,train_idx,val_idx,meta_file,disease,fold_number+1,graph_dir,kneighbor,rseed,result_dir)
-        # else:
-
         # Get P3_build_graph graph_final (0,1 for edge connection)
-        graph=run_MLP_embedding_train_mode.build_graph_mlp(train_norm,train_idx,val_idx,meta_file,disease,fold_number+1,graph_dir,kneighbor,rseed,result_dir)
+        graph = run_MLP_embedding_train_mode.build_graph_mlp(train_norm,train_idx,val_idx,meta_file,disease,fold_number+1,graph_dir,kneighbor,rseed,result_dir)
 
         # Train and testing 
-        labels,classes_dict=encode_onehot(labels_raw)
+        labels,classes_dict = encode_onehot(labels_raw)
         features = sp.csr_matrix(features, dtype=np.float32)
         features=torch.FloatTensor(np.array(features.todense()))
         labels = torch.LongTensor(np.where(labels)[1])
@@ -616,32 +601,30 @@ def run(node_norm,eg_fs,eg_fs_norm,meta_file,disease,out,kneighbor,rseed,cvfold,
         adj = sparse_mx_to_torch_sparse_tensor(adj)
 
         feature_id=list(range(int(features.shape[1])))
-        tem_train_id=list(range(train_id))
+        tem_train_id=list(range(train_idx))
  
-        model=GCN(nfeat=features.shape[1], nhid=32, nclass=labels.max().item() + 1, dropout=0.5)
+        model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
         optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
         max_val_auc=0
 
         for epoch in range(150):
-            val_auc=train(epoch,train_idx,val_idx,model,optimizer,features,adj,labels,result_detailed_file,max_val_auc,result_dir,fold_number+1,classes_dict,tid2name,1)
+            _, val_auc, _ = train(epoch,train_idx,val_idx,model,optimizer,features,adj,labels,result_detailed_file,max_val_auc,result_dir,fold_number+1,classes_dict,idx_to_subjectId,1, save_val_results=True)
             if val_auc>max_val_auc:
                 max_val_auc=val_auc
 
         ## Feature importance
-        if rfi==1: 
-            selected={}
-            selected_arr=[]
-            o3=open(result_dir+'/feature_importance_fold'+str(fold_number+1)+'.txt','w+')
-            o4 = open(result_dir + '/feature_local_importance_fold' + str(fold_number + 1) + '.txt', 'w+')
+        if run_feature_importance==1: 
+            feat_imp_fold_file=open(result_dir+'/feature_importance_fold'+str(fold_number+1)+'.txt','w+')
+            feat_imp_local_file = open(result_dir + '/feature_local_importance_fold' + str(fold_number + 1) + '.txt', 'w+')
             uid=uuid.uuid1().hex
             ot=open(uid+'.log','w+')
-            sid,sname=feature_importance_check(selected,selected_arr,feature_id,train_idx,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,tid2name,o3,ot,dcs,fnum,o4)
+            species_id,sname=feature_importance_check(feature_id,train_idx,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,idx_to_subjectId,feat_imp_fold_file,ot,species_name,fnum,feat_imp_local_file)
             ot.close()
             os.system('rm '+uid+'.log')
 
             uid=uuid.uuid1().hex
             ot2=open(uid+'.log','w+')
-            detect_dsp(graph,eg_fs_norm,feature_id,labels_raw,labels,adj,train_idx,val_idx,result_dir,ot2,classes_dict,tid2name,sid,sname,fold_number)
+            detect_dsp(graph,node_raw,feature_id,labels_raw,labels,adj,train_idx,val_idx,result_dir,ot2,classes_dict,idx_to_subjectId,species_id,sname,fold_number)
             ot2.close()
             os.system('rm '+uid+'.log')
         
@@ -653,7 +636,7 @@ def run(node_norm,eg_fs,eg_fs_norm,meta_file,disease,out,kneighbor,rseed,cvfold,
             o6=open(result_dir+'/node_importance_combination_fold'+str(fold_number+1)+'.txt','w+')
             uid=uuid.uuid1().hex
             ot2=open(uid+'.log','w+')
-            node_importance_check(selected,selected_arr,tem_train_id,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,tid2name,o5,o6,ot2,nnum)
+            node_importance_check(selected,selected_arr,tem_train_id,val_idx,features,adj,labels,result_dir,fold_number,classes_dict,idx_to_subjectId,o5,o6,ot2,nnum)
             ot2.close()
             os.system('rm '+uid+'.log')
 

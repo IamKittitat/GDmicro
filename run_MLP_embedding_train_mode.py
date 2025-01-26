@@ -82,7 +82,7 @@ def AUC(output,labels):
     auc = metrics.auc(fpr,tpr)
     return auc
 
-#merge('T2D_result/Graph_File/feature_out_train_Fold1_eggNOG.txt','T2D_result/Graph_File/feature_out_test_Fold1_eggNOG.txt',list(range(340)),list(range(340,363)),'T2D_result/Graph_File/merge_embedding_Fold1.txt')
+
 def merge_embedding_vector_train_mode(infile1, infile2, train_idx, val_idx, ofile):
     with open(infile1, 'r') as f1:
         train_data = {train_idx[i]: line.strip() for i, line in enumerate(f1)}

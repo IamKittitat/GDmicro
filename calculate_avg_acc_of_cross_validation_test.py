@@ -1,5 +1,4 @@
 import re
-import os
 import numpy as np
 
 def cal_acc_cv(infile,ofile):
@@ -20,8 +19,6 @@ def cal_acc_cv(infile,ofile):
     dvalum={}
     dtestum={}
 
-    #dtest_acc={}
-    #dtest_auc={}
     while True:
         line=f.readline().strip()
         if not line:break
@@ -41,8 +38,6 @@ def cal_acc_cv(infile,ofile):
             dtrainum[fid]=0
             dvalum[fid]=0
             dtestum[fid]=0
-            #dtest_acc[fid]=0
-            #dtest_auc[fid]=0
             continue
         ele=line.split()
         dtrain[fid].append(float(ele[5]))
@@ -51,15 +46,6 @@ def cal_acc_cv(infile,ofile):
         dtrainu[fid].append(float(ele[13]))
         dvalu[fid].append(float(ele[15]))
         dtestu[fid].append(float(ele[23]))
-
-        #ele[-2]=re.sub('accuracy=','',ele[-2])
-        #ele[-1]=re.sub('AUC=','',ele[-1])
-        '''
-        if float(ele[-2])>dtest_acc[fid]:
-            dtest_acc[fid]=float(ele[-2])
-        if float(ele[-1])>dtest_auc[fid]:
-            dtest_auc[fid]=float(ele[-1])
-        '''
 
         if float(ele[5])>dtrainm[fid]:
             dtrainm[fid]=float(ele[5])
@@ -89,40 +75,13 @@ def cal_acc_cv(infile,ofile):
     bt_valu=[]
     bt_testu=[]
 
-    #bt_tacc=[]
-    #bt_tauc=[]
     for i in dtrain:
-        #o.write('The average train acc of Fold '+str(i)+' is '+str(np.mean(dtrain[i]))+'\n')
-        #o.write('The average train AUC of Fold '+str(i)+' is '+str(np.mean(dtrainu[i]))+'\n')
         o.write('The best train acc of Fold '+str(i)+' is '+str(dtrainm[i])+'\n')
         o.write('The best train AUC of Fold '+str(i)+' is '+str(dtrainum[i])+'\n')
         o.write('The best val acc of Fold '+str(i)+' is '+str(dvalm[i])+'\n')
         o.write('The best val AUC of Fold '+str(i)+' is '+str(dvalum[i])+'\n')
         o.write('The best test acc of Fold '+str(i)+' is '+str(dtestm[i])+'\n')
         o.write('The best test AUC of Fold '+str(i)+' is '+str(dtestum[i])+'\n')
-        #o.write('The best test acc of Fold '+str(i)+' is '+str(dtest_acc[i])+'\n')
-        #o.write('The best test AUC of Fold '+str(i)+' is '+str(dtest_auc[i])+'\n')
-        ''' 
-        print('The best train acc of Fold '+str(i)+' is '+str(dtrainm[i])+'\n')
-        print('The best train AUC of Fold '+str(i)+' is '+str(dtrainum[i])+'\n')
-
-        print('The best val acc of Fold '+str(i)+' is '+str(dvalm[i])+'\n')
-        print('The best val AUC of Fold '+str(i)+' is '+str(dvalum[i])+'\n')
-
-        print('The best test acc of Fold '+str(i)+' is '+str(dtestm[i])+'\n')
-        print('The best test AUC of Fold '+str(i)+' is '+str(dtestum[i])+'\n')
-        '''
-
-
-
-
-
-
-        #o.write('The average val acc of Fold '+str(i)+' is '+str(np.mean(dval[i]))+'\n\n')
-        #o.write('The average val AUC of Fold '+str(i)+' is '+str(np.mean(dvalu[i]))+'\n\n')
-        #o.write('The best val acc of Fold '+str(i)+' is '+str(dvalm[i])+'\n')
-        #o.write('The best val AUC of Fold '+str(i)+' is '+str(dvalum[i])+'\n')
-
 
         avg_train.append(np.mean(dtrain[i]))
         avg_val.append(np.mean(dval[i]))
@@ -139,32 +98,9 @@ def cal_acc_cv(infile,ofile):
         bt_trainu.append(dtrainum[i])
         bt_valu.append(dvalum[i])
         bt_testu.append(dtestum[i])
-        #bt_tacc.append(dtest_acc[i])
-        #bt_tauc.append(dtest_auc[i])
-    '''
-    o.write('Final: The average train acc is '+str(np.mean(avg_train))+'\n')
-    o.write('Final: The average train AUC is '+str(np.mean(avg_tu))+'\n')
-    o.write('Final: The average val acc is '+str(np.mean(avg_val))+'\n')
-    o.write('Final: The average val AUC is '+str(np.mean(avg_vu))+'\n')
-    '''
     o.write('Final: The averaga train acc is '+str(np.mean(bt_train))+'\n')
     o.write('Final: The average train AUC is '+str(np.mean(bt_trainu))+'\n')
     o.write('Final: The average val acc is '+str(np.mean(bt_val))+'\n')
     o.write('Final: The average val AUC is '+str(np.mean(bt_valu))+'\n')
     o.write('Final: The average test acc is '+str(np.mean(bt_test))+'\n')
     o.write('Final: The average test AUC is '+str(np.mean(bt_testu))+'\n')
-
-    #o.write('Final: The average test acc is '+str(np.mean(bt_tacc))+'\n')
-    #o.write('Final: The average test AUC is '+str(np.mean(bt_tauc))+'\n')
-    '''
-    print('The average train acc is ',np.mean(bt_train))
-    print('The average train AUC is ',np.mean(bt_trainu))
-    print('The average val acc is ',np.mean(bt_val))
-    print('The average val AUC is ',np.mean(bt_valu))
-    print('The average test acc is ',np.mean(bt_test))
-    print('The average test AUC is ',np.mean(bt_testu))
-    '''
-
-#cal_acc_cv('test.o')
-#cal_acc_cv('CRC_41_GCN/FRA/Res_File/r1.txt','CRC_41_GCN/FRA/Res_File/r2.txt')
-            
