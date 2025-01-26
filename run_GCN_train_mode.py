@@ -152,12 +152,12 @@ def avg_score(avc,vnsa):
             avc[s]['Decrease2Health'] = sum(avc[s]['Decrease2Health']) / vnsa[s]
     return avc
 
-def iter_run(features,train_idx,test_id , adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId):
+def iter_run(features,train_id,test_id , adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId):
     model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
     max_train_auc = 0
     for epoch in range(150):
-        train_auc, _, train_prob = train(epoch, np.array(train_idx), np.array(test_id), model, optimizer, features, adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, idx_to_subjectId,  0)
+        train_auc, _, train_prob = train(epoch, np.array(train_id), np.array(test_id), model, optimizer, features, adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, idx_to_subjectId,  0)
         train_auc = float(train_auc)
         if train_auc > max_train_auc:
             max_train_auc = train_auc
@@ -165,7 +165,7 @@ def iter_run(features,train_idx,test_id , adj, labels, ot2, result_dir,classes_d
 
     return best_prob
 
-def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_idx, test_id, result_dir,ot2,classes_dict, idx_to_subjectId,species_id,sname,fold_number):
+def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_id, test_id, result_dir,ot2,classes_dict, idx_to_subjectId,species_id,sname,fold_number):
     setup_seed(10)
     dn={}
     idx_features_labels = np.genfromtxt("{}".format(node_raw), dtype=np.dtype(str))
@@ -195,9 +195,9 @@ def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_idx, tes
     for s in dn:
         p=0
         n=0
-        if s not in train_idx:continue
+        if s not in train_id:continue
         for s2 in dn[s]:
-            if s2 not in train_idx:continue
+            if s2 not in train_id:continue
             if labels_raw[s2]=='Health':
                 n+=1
             else:
@@ -210,7 +210,7 @@ def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_idx, tes
     max_train_auc=0
     for epoch in range(150):
         print('DSD_Raw')
-        train_auc, _, train_prob = train(epoch, np.array(train_idx), np.array(test_id), model, optimizer, features,adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, idx_to_subjectId, 0)
+        train_auc, _, train_prob = train(epoch, np.array(train_id), np.array(test_id), model, optimizer, features,adj, labels, ot2, max_train_auc, result_dir, 0, classes_dict, idx_to_subjectId, 0)
         train_auc = float(train_auc)
         if train_auc > max_train_auc:
             max_train_auc = train_auc
@@ -267,8 +267,8 @@ def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_idx, tes
                 set_index.append(4)
 
 
-            bp1 = iter_run(features_one, train_idx,test_id, adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId)
-            bp2 = iter_run(features_two, train_idx, test_id, adj, labels, ot2, result_dir, classes_dict, idx_to_subjectId)
+            bp1 = iter_run(features_one, train_id,test_id, adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId)
+            bp2 = iter_run(features_two, train_id, test_id, adj, labels, ot2, result_dir, classes_dict, idx_to_subjectId)
             res[t][s][set_index[0]]= str(bp1[t][1])
             res[t][s][set_index[1]] = str(bp2[t][1])
     health_lab=0
@@ -522,7 +522,7 @@ def load_species_name(train_norm):
 def load_metadata(meta_file):
     idx_to_subjectId = {}
     test_idx = []
-    train_idx = 0
+    train_id = 0
 
     with open(meta_file, 'r') as fm:
         next(fm)  
@@ -537,11 +537,11 @@ def load_metadata(meta_file):
             if ele[-1] == 'test':
                 test_idx.append(c)
             if ele[-1] in ['train', 'test']:
-                train_idx = c
+                train_id = c
 
-    train_idx += 1
+    train_id += 1
     test_idx = np.array(test_idx)
-    return idx_to_subjectId, test_idx, train_idx
+    return idx_to_subjectId, test_idx, train_id
 
 def run(node_norm,train_raw,node_raw,meta_file,disease,out,kneighbor,rseed,cvfold,train_norm,fnum,nnum,anode,run_feature_importance):
     if rseed != 0:
@@ -570,12 +570,12 @@ def run(node_norm,train_raw,node_raw,meta_file,disease,out,kneighbor,rseed,cvfol
     result_detailed_dir = result_dir+'/r1.txt'
     result_summary_dir = result_dir+'/r2.txt'
 
-    idx_to_subjectId, test_idx, train_idx = load_metadata(meta_file)
+    idx_to_subjectId, test_idx, train_id = load_metadata(meta_file)
     
     result_detailed_file=open(result_detailed_dir,'w+')
     fold_number=0
 
-    for train_idx,val_idx in splits.split(features[:train_idx],labels_raw[:train_idx]):
+    for train_idx,val_idx in splits.split(features[:train_id],labels_raw[:train_id]):
         result_detailed_file.write('Fold {}'.format(fold_number+1)+'\n')
         print('Fold {}'.format(fold_number+1)+', Train:'+str(len(train_idx))+' Test:'+str(len(val_idx)))
 
@@ -599,7 +599,7 @@ def run(node_norm,train_raw,node_raw,meta_file,disease,out,kneighbor,rseed,cvfol
         adj = sparse_mx_to_torch_sparse_tensor(adj)
 
         feature_id=list(range(int(features.shape[1])))
-        tem_train_id=list(range(train_idx))
+        tem_train_id=list(range(train_id))
  
         model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
         optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
