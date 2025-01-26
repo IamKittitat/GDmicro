@@ -571,8 +571,6 @@ def run(node_norm,train_raw,node_raw,meta_file,disease,out,kneighbor,rseed,cvfol
     result_summary_dir = result_dir+'/r2.txt'
 
     idx_to_subjectId, test_idx, train_idx = load_metadata(meta_file)
-    train_idx=train_idx+1
-    test_idx=np.array(test_idx)
     
     result_detailed_file=open(result_detailed_dir,'w+')
     fold_number=0
