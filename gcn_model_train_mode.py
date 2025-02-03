@@ -2,12 +2,14 @@ import math
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
 from sklearn.model_selection import StratifiedKFold
 from sklearn import metrics
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 hidden = 32
@@ -58,57 +60,25 @@ def load_data(mlp_or_not,graph,node_file,input_sample):
             idx_train.append(c)
         else:
             idx_test.append(c)
-        t2d2name[c].append(ele[2])
+        tid2name[c].append(ele[2])
         c+=1
-
-
-
-
 
     print('Loading {} dataset...'.format(graph+' plus '+node_file))
     idx_features_labels = np.genfromtxt("{}".format(node_file),dtype=np.dtype(str))
-    #print(idx_features_labels)
     features=idx_features_labels[:, 1:-1]
     features=features.astype(float)
     
     a=np.array(idx_features_labels[:, 1:-1])
     a=a.astype(float)
-    #a=stats.zscore(a,axis=1,ddof=1)
-    '''
-    features=[]
-    for s in a:
-        mean=s.mean()
-        std=s.std()
-        features.append((s-mean)/std)
-    '''
+
     features=np.array(features)
-    #print(features)
-    #exit()
-    #features=a
-    
-    #print(features)
-    #exit()
-    
-    #features = sp.csr_matrix(features, dtype=np.float32)
-    #features = normalize(features)
-    #features = torch.FloatTensor(np.array(features.todense()))
-    #print(idx_features_labels[:, -1])
-    #exit()
     labels,classes_dict = encode_onehot(idx_features_labels[:, -1])
-    #features_train
-    #labels_train
-    #print(idx_features_labels[:, -1])
-    #print(len(labels))
-    #labels = torch.LongTensor(np.where(labels)[1])
     f1=features[idx_train]
     f2=features[idx_test]
     l1=labels[idx_train]
     l2=labels[idx_test]
     features=np.concatenate((f1, f2), axis=0)
     labels=np.concatenate((l1, l2), axis=0)
-    #print(features)
-    #print(labels)
-    #exit()
     features = sp.csr_matrix(features, dtype=np.float32)
 
     idx = np.array(idx_features_labels[:, 0], dtype=np.int32)
@@ -123,23 +93,8 @@ def load_data(mlp_or_not,graph,node_file,input_sample):
         adj=sp.csr_matrix(adj)
     else:
         adj = normalize(adj + sp.eye(adj.shape[0]))
-    #print(adj.shape)
-    #print(adj)
-    #exit()
-    
-    total_num=len(labels)
-    #tnum=int(3*(total_num/4))
 
-    #idx_train = range(tnum)
-    #idx_val = range(tnum,total_num)
-    #print(idx_train)
-    #print(idx_val)
-    #exit()
     idx_test = range(len(idx_train), len(labels))
-    #print(len(idx_train))
-    #print(idx_test)
-    #exit()
-
     features = torch.FloatTensor(np.array(features.todense()))
     labels = torch.LongTensor(np.where(labels)[1])
     features_train=features[:len(idx_train)]
@@ -147,10 +102,7 @@ def load_data(mlp_or_not,graph,node_file,input_sample):
 
     adj = sparse_mx_to_torch_sparse_tensor(adj)
 
-    #idx_train = torch.LongTensor(idx_train)
-    #idx_val = torch.LongTensor(idx_val)
     idx_test = torch.LongTensor(idx_test)
-    #print(labels)
     return adj, features, labels, features_train,labels_train, idx_test,idx_train,classes_dict,tid2name
 
 class GraphConvolution(Module):
@@ -161,8 +113,6 @@ class GraphConvolution(Module):
         self.weight = Parameter(torch.FloatTensor(in_features, out_features))
         if bias:
             self.bias=Parameter(torch.FloatTensor(out_features))
-        else:
-            lf.register_parameter('bias', None)
         self.reset_parameters()
     def reset_parameters(self):
         stdv = 1. / math.sqrt(self.weight.size(1))
@@ -191,6 +141,69 @@ class GCN(nn.Module):
         x = self.gc2(x, adj)
         return torch.nn.functional.log_softmax(x, dim=1)
 
+class GraphAttentionLayer(nn.Module):
+    def __init__(self, in_features, out_features, dropout, alpha, concat=True):
+        super(GraphAttentionLayer, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.alpha = alpha
+        self.concat = concat
+
+        self.W = Parameter(torch.empty(size=(in_features, out_features)))
+        self.a = Parameter(torch.empty(size=(2 * out_features, 1)))
+        
+        self.leakyrelu = nn.LeakyReLU(self.alpha)
+        self.dropout = nn.Dropout(dropout)
+        
+        self.reset_parameters()
+    
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.W)
+        nn.init.xavier_uniform_(self.a)
+    
+    def forward(self, h, adj):
+        Wh = torch.mm(h, self.W)  # Linear transformation
+        
+        N = Wh.size(0)
+        
+        # Compute attention scores
+        a_input = torch.cat([Wh.repeat(1, N).view(N * N, -1), Wh.repeat(N, 1)], dim=1).view(N, -1, 2 * self.out_features)
+        e = self.leakyrelu(torch.matmul(a_input, self.a).squeeze(2))
+        
+        # Mask out unconnected nodes
+        zero_vec = -9e15 * torch.ones_like(e)
+        attention = torch.where(adj > 0, e, zero_vec)
+        
+        # Apply softmax
+        attention = F.softmax(attention, dim=1)
+        attention = self.dropout(attention)
+        
+        # Apply attention weights
+        h_prime = torch.matmul(attention, Wh)
+        
+        if self.concat:
+            return F.elu(h_prime)
+        else:
+            return h_prime
+
+class GAT(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout, alpha = 0.2, nheads = 4):
+        super(GAT, self).__init__()
+        self.dropout = dropout
+
+        # Multi-head attention layers
+        self.attentions = nn.ModuleList([GraphAttentionLayer(nfeat, nhid, dropout, alpha, True) for _ in range(nheads)])
+        
+        # Output layer (single-head)
+        self.out_att = GraphAttentionLayer(nhid * nheads, nclass, dropout, alpha, False)
+    
+    def forward(self, x, adj):
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = torch.cat([att(x, adj) for att in self.attentions], dim=1)  # Multi-head attention
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = self.out_att(x, adj)  # Output layer
+        return F.log_softmax(x, dim=1)
+
 def accuracy(output,labels):
     preds=output.max(1)[1].type_as(labels)
     correct=preds.eq(labels).double()
@@ -205,6 +218,7 @@ def AUC(output,labels):
     auc=metrics.auc(fpr,tpr)
     return auc
 
+# features = node_norm
 def train(epoch,train_idx,val_idx,model,optimizer,features,adj,labels,
           result_detailed_file,max_val_auc,result_dir,fold,classes_dict,tid2name,record, save_val_results = False):
     t=time.time()

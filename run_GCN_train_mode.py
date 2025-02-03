@@ -5,7 +5,7 @@ import pandas as pd
 import scipy.sparse as sp
 from sklearn.model_selection import StratifiedKFold
 import run_MLP_embedding_train_mode
-from gcn_model_train_mode import encode_onehot,GCN,train,normalize,sparse_mx_to_torch_sparse_tensor
+from gcn_model_train_mode import encode_onehot,GCN,train,normalize,sparse_mx_to_torch_sparse_tensor, GAT
 from calculate_avg_acc_of_cross_validation_train_mode import cal_acc_cv
 import torch
 from sklearn.metrics.pairwise import cosine_similarity
@@ -153,7 +153,8 @@ def avg_score(avc,vnsa):
     return avc
 
 def iter_run(features,train_id,test_id , adj, labels, ot2, result_dir,classes_dict, idx_to_subjectId):
-    model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+    # model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+    model = GAT(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
     max_train_auc = 0
     for epoch in range(150):
@@ -205,7 +206,8 @@ def detect_dsp(graph, node_raw,feature_id, labels_raw,labels,adj, train_id, test
         if p>=0 and n>=0:
             tg.append(s)
     print('There are '+str(len(tg))+' samples have both >=0 healthy and disease neighbors.')
-    model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+    # model = GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+    model = GAT(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-5)
     max_train_auc=0
     for epoch in range(150):
@@ -420,7 +422,8 @@ def feature_importance_check(feature_id,train_idx,val_idx,features,adj,labels,re
             if i in selected:continue
             features_tem=[[x[i]] for x in features]
             features_tem=torch.Tensor(features_tem)
-            model=GCN(nfeat=features_tem.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+            # model=GCN(nfeat=features_tem.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+            model = GAT(nfeat=features_tem.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
             optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
             for epoch in range(50):
                 train_auc, _, sample_prob = train(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features_tem,adj,labels,ot,max_train_auc,result_dir,fold_number+1,classes_dict,idx_to_subjectId,0)
@@ -461,7 +464,8 @@ def node_importance_check(selected,selected_arr,tem_train_id,val_idx,features,ad
             if i in selected:continue
             if i in val_idx:continue
             train_idx=selected_arr+[i]
-            model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+            # model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+            model = GAT(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
             optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
             for epoch in range(50):
                 _, val_auc, _ = train(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features,adj,labels,ot2,max_val_auc,result_dir,fold_number+1,classes_dict,idx_to_subjectId,0, save_val_results=True)
@@ -601,7 +605,8 @@ def run(node_norm,train_raw,node_raw,meta_file,disease,out,kneighbor,rseed,cvfol
         feature_id=list(range(int(features.shape[1])))
         tem_train_id=list(range(train_id))
  
-        model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+        # model=GCN(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
+        model = GAT(nfeat=features.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
         optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
         max_val_auc=0
 
