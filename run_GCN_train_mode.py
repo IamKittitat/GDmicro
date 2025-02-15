@@ -424,7 +424,7 @@ def feature_importance_check(feature_id,train_idx,val_idx,features,adj,labels,re
             features_tem=[[x[i]] for x in features]
             features_tem=torch.Tensor(features_tem)
             # model=GCN(nfeat=features_tem.shape[1], hidden_layer=32, nclass=labels.max().item() + 1, dropout=0.5)
-            model = GAT(in_features=features.shape[1], n_hidden=32, n_heads=8, num_classes=labels.max().item() + 1)
+            model = GAT(in_features=features_tem.shape[1], n_hidden=32, n_heads=8, num_classes=labels.max().item() + 1)
             optimizer = torch.optim.Adam(model.parameters(),lr=0.01, weight_decay=1e-5)
             for epoch in range(50):
                 train_auc, _, sample_prob = train(epoch,np.array(train_idx),np.array(val_idx),model,optimizer,features_tem,adj,labels,ot,max_train_auc,result_dir,fold_number+1,classes_dict,idx_to_subjectId,0)
