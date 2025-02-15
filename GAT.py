@@ -104,7 +104,7 @@ class GraphAttentionLayer(nn.Module):
 
         # Set the attention score for non-existent edges to -9e15 (MASKING NON-EXISTENT EDGES)
         connectivity_mask = -9e16 * torch.ones_like(e)
-        e = torch.where(adj_mat > 0, e, connectivity_mask) # masked attention scores
+        e = torch.where(adj_mat.to_dense() > 0, e, connectivity_mask) # masked attention scores
         
         # attention coefficients are computed as a softmax over the rows
         # for each column j in the attention score matrix e
